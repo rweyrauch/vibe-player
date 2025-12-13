@@ -21,46 +21,54 @@
 
 volatile sig_atomic_t signal_received = 0;
 
-void SignalHandler(int signum) {
+void SignalHandler(int signum)
+{
     signal_received = signum;
 }
 
-void InitializeNcurses() {
-    initscr();         // Initialize screen
-    cbreak();          // Disable line buffering
-    noecho();          // Don't echo input
-    keypad(stdscr, TRUE);  // Enable special keys
-    timeout(100);      // 100ms timeout for getch()
-    curs_set(0);       // Hide cursor
+void InitializeNcurses()
+{
+    initscr();            // Initialize screen
+    cbreak();             // Disable line buffering
+    noecho();             // Don't echo input
+    keypad(stdscr, TRUE); // Enable special keys
+    timeout(100);         // 100ms timeout for getch()
+    curs_set(0);          // Hide cursor
 }
 
-void CleanupNcurses() {
+void CleanupNcurses()
+{
     echo();
     nocbreak();
     endwin();
 }
 
-void DrawProgressBar(int y, int x, int width, float progress) {
+void DrawProgressBar(int y, int x, int width, float progress)
+{
     move(y, x);
     addch('[');
     int filled = (int)(width * progress);
-    for (int i = 0; i < width; i++) {
+    for (int i = 0; i < width; i++)
+    {
         addch(i < filled ? '=' : ' ');
     }
     addch(']');
 }
 
-void DrawBar(int y, int x, int width, float level) {
+void DrawBar(int y, int x, int width, float level)
+{
     move(y, x);
     addch('[');
     int filled = (int)(width * level);
-    for (int i = 0; i < width; i++) {
+    for (int i = 0; i < width; i++)
+    {
         addch(i < filled ? '#' : ' ');
     }
     addch(']');
 }
 
-void DrawFrequencyBars(int y, AudioPlayer& player) {
+void DrawFrequencyBars(int y, AudioPlayer &player)
+{
     float bass, mid, treble;
     player.GetFrequencyLevels(bass, mid, treble);
 
@@ -76,32 +84,34 @@ void DrawFrequencyBars(int y, AudioPlayer& player) {
     mvprintw(y + 1, 33, "Treble");
 }
 
-void DrawInterface(AudioPlayer& player,
-                                    const std::vector<std::string>& playlist,
-                                    size_t current_track_index,
-                                    bool directory_mode,
-                                    const std::string& status_message) {
+void DrawInterface(AudioPlayer &player,
+                   const std::vector<std::string> &playlist,
+                   size_t current_track_index,
+                   bool directory_mode,
+                   const std::string &status_message)
+{
     clear();
 
     namespace fs = std::filesystem;
 
     // Track info (lines 0-1)
     mvprintw(0, 0, "Now Playing: %s",
-                    fs::path(playlist[current_track_index]).filename().string().c_str());
-    if (directory_mode) {
+             fs::path(playlist[current_track_index]).filename().string().c_str());
+    if (directory_mode)
+    {
         mvprintw(1, 0, "Track %zu of %zu",
-                        current_track_index + 1, playlist.size());
+                 current_track_index + 1, playlist.size());
     }
 
     // Status bar (line 3)
-    const char* icon = player.IsPlaying() ? ">" :
-                                        player.IsPaused() ? "||" : "[]";
+    const char *icon = player.IsPlaying() ? ">" : player.IsPaused() ? "||"
+                                                                    : "[]";
     int pos = player.GetPosition();
     int dur = player.GetDuration();
     float vol = player.GetVolume();
 
     mvprintw(3, 0, "[%s] %02d:%02d / %02d:%02d | Volume: %d%% | ",
-                    icon, pos/60, pos%60, dur/60, dur%60, (int)(vol*100));
+             icon, pos / 60, pos % 60, dur / 60, dur % 60, (int)(vol * 100));
 
     // Progress bar
     float progress = dur > 0 ? (float)pos / dur : 0.0f;
@@ -121,102 +131,126 @@ void DrawInterface(AudioPlayer& player,
 }
 
 std::string HandleCommand(int ch,
-                                                    AudioPlayer& player,
-                                                    std::vector<std::string>& playlist,
-                                                    size_t& current_track_index,
-                                                    bool directory_mode,
-                                                    bool& running) {
+                          AudioPlayer &player,
+                          std::vector<std::string> &playlist,
+                          size_t &current_track_index,
+                          bool directory_mode,
+                          bool &running)
+{
     namespace fs = std::filesystem;
 
-    switch (ch) {
-        case 'q': case 'Q':
-            running = false;
-            return "Quitting...";
-        case 'h': case 'H':
-            return "Press keys for commands (no Enter needed)";
-        case 'p': case 'P':
+    switch (ch)
+    {
+    case 'q':
+    case 'Q':
+        running = false;
+        return "Quitting...";
+    case 'h':
+    case 'H':
+        return "Press keys for commands (no Enter needed)";
+    case 'p':
+    case 'P':
+        player.Play();
+        return "Playing...";
+    case 's':
+    case 'S':
+        player.Stop();
+        return "Stopped";
+    case 'u':
+    case 'U':
+        player.Pause();
+        return "Paused";
+    case 'r':
+    case 'R':
+        player.Play();
+        return "Resumed";
+    case '+':
+        player.SetVolume(std::min(1.0f, player.GetVolume() + 0.1f));
+        return "Volume up";
+    case '-':
+        player.SetVolume(std::max(0.0f, player.GetVolume() - 0.1f));
+        return "Volume down";
+    case 'f':
+    case 'F':
+        player.Seek(player.GetPosition() + 10);
+        return "Forward 10s";
+    case 'b':
+    case 'B':
+        player.Seek(std::max(0, player.GetPosition() - 10));
+        return "Back 10s";
+    case 'n':
+    case 'N':
+        if (directory_mode && current_track_index < playlist.size() - 1)
+        {
+            current_track_index++;
+            player.Cleanup();
+            player.LoadFile(playlist[current_track_index]);
             player.Play();
-            return "Playing...";
-        case 's': case 'S':
-            player.Stop();
-            return "Stopped";
-        case 'u': case 'U':
-            player.Pause();
-            return "Paused";
-        case 'r': case 'R':
-            player.Play();
-            return "Resumed";
-        case '+':
-            player.SetVolume(std::min(1.0f, player.GetVolume() + 0.1f));
-            return "Volume up";
-        case '-':
-            player.SetVolume(std::max(0.0f, player.GetVolume() - 0.1f));
-            return "Volume down";
-        case 'f': case 'F':
-            player.Seek(player.GetPosition() + 10);
-            return "Forward 10s";
-        case 'b': case 'B':
-            player.Seek(std::max(0, player.GetPosition() - 10));
-            return "Back 10s";
-        case 'n': case 'N':
-            if (directory_mode && current_track_index < playlist.size() - 1) {
-                current_track_index++;
-                player.Cleanup();
-                player.LoadFile(playlist[current_track_index]);
-                player.Play();
-                return "Next track";
-            }
-            return directory_mode ? "Last track" : "Next only in directory mode";
-        case 'i': case 'I':
-            return "Track info displayed above";
-        default:
-            return "Unknown command (press h for help)";
+            return "Next track";
+        }
+        return directory_mode ? "Last track" : "Next only in directory mode";
+    case 'i':
+    case 'I':
+        return "Track info displayed above";
+    default:
+        return "Unknown command (press h for help)";
     }
 }
 
-bool CheckAutoAdvance(AudioPlayer& player,
-                                            std::vector<std::string>& playlist,
-                                            size_t& current_track_index,
-                                            bool directory_mode,
-                                            bool& was_playing) {
-    if (was_playing && !player.IsPlaying() && !player.IsPaused()) {
+bool CheckAutoAdvance(AudioPlayer &player,
+                      std::vector<std::string> &playlist,
+                      size_t &current_track_index,
+                      bool directory_mode,
+                      bool &was_playing)
+{
+    if (was_playing && !player.IsPlaying() && !player.IsPaused())
+    {
         was_playing = false;
-        if (directory_mode && current_track_index < playlist.size() - 1) {
+        if (directory_mode && current_track_index < playlist.size() - 1)
+        {
             current_track_index++;
             player.Cleanup();
-            if (player.LoadFile(playlist[current_track_index])) {
+            if (player.LoadFile(playlist[current_track_index]))
+            {
                 player.Play();
                 was_playing = true;
                 return true;
             }
         }
-    } else if (player.IsPlaying()) {
+    }
+    else if (player.IsPlaying())
+    {
         was_playing = true;
     }
     return false;
 }
 
-std::vector<std::string> ScanDirectoryForAudio(const std::string& dir_path) {
+std::vector<std::string> ScanDirectoryForAudio(const std::string &dir_path)
+{
     std::vector<std::string> audio_files;
     const std::vector<std::string> valid_extensions =
-            {".wav", ".mp3", ".flac", ".ogg"};
+        {".wav", ".mp3", ".flac", ".ogg"};
 
     namespace fs = std::filesystem;
 
-    try {
-        if (!fs::exists(dir_path) || !fs::is_directory(dir_path)) {
+    try
+    {
+        if (!fs::exists(dir_path) || !fs::is_directory(dir_path))
+        {
             std::cerr << "Error: Directory does not exist: " << dir_path
-                                << std::endl;
+                      << std::endl;
             return audio_files;
         }
 
-        for (const auto& entry : fs::directory_iterator(dir_path)) {
-            if (entry.is_regular_file()) {
+        for (const auto &entry : fs::directory_iterator(dir_path))
+        {
+            if (entry.is_regular_file())
+            {
                 std::string ext = entry.path().extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-                if (std::find(valid_extensions.begin(), valid_extensions.end(), ext)
-                        != valid_extensions.end()) {
+                if (std::find(valid_extensions.begin(), valid_extensions.end(), ext) != valid_extensions.end())
+                {
                     audio_files.push_back(entry.path().string());
                 }
             }
@@ -224,38 +258,41 @@ std::vector<std::string> ScanDirectoryForAudio(const std::string& dir_path) {
 
         // Sort files alphabetically
         std::sort(audio_files.begin(), audio_files.end());
-
-    } catch (const fs::filesystem_error& e) {
+    }
+    catch (const fs::filesystem_error &e)
+    {
         std::cerr << "Error scanning directory: " << e.what() << std::endl;
     }
 
     return audio_files;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
     // Parse command line arguments using cxxopts
     cxxopts::Options options("cli-player",
-                                                    "CLI Audio Player - Play audio files from command line");
+                             "CLI Audio Player - Play audio files from command line");
 
-    options.add_options()
-            ("d,directory", "Play all audio files in a directory",
-            cxxopts::value<std::string>())
-            ("f,file", "Play a single audio file", cxxopts::value<std::string>())
-            ("h,help", "Print usage");
+    options.add_options()("d,directory", "Play all audio files in a directory",
+                          cxxopts::value<std::string>())("f,file", "Play a single audio file", cxxopts::value<std::string>())("h,help", "Print usage");
 
     options.parse_positional({"file"});
     options.positional_help("<audio_file>");
 
     cxxopts::ParseResult result;
-    try {
+    try
+    {
         result = options.parse(argc, argv);
-    } catch (const cxxopts::exceptions::exception& e) {
+    }
+    catch (const cxxopts::exceptions::exception &e)
+    {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
         std::cout << options.help() << std::endl;
         return 1;
     }
 
-    if (result.count("help")) {
+    if (result.count("help"))
+    {
         std::cout << options.help() << std::endl;
         return 0;
     }
@@ -266,39 +303,47 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> playlist;
     size_t current_track_index = 0;
 
-    if (result.count("directory")) {
+    if (result.count("directory"))
+    {
         // Directory mode
         directory_mode = true;
         input_path = result["directory"].as<std::string>();
         playlist = ScanDirectoryForAudio(input_path);
 
-        if (playlist.empty()) {
+        if (playlist.empty())
+        {
             std::cerr << "No audio files found in directory: " << input_path
-                                << std::endl;
+                      << std::endl;
             return 1;
         }
 
         std::cout << "Found " << playlist.size() << " audio file(s) in directory"
-                            << std::endl;
-        for (size_t i = 0; i < playlist.size(); ++i) {
+                  << std::endl;
+        for (size_t i = 0; i < playlist.size(); ++i)
+        {
             namespace fs = std::filesystem;
             std::cout << "  " << (i + 1) << ". "
-                                << fs::path(playlist[i]).filename().string() << std::endl;
+                      << fs::path(playlist[i]).filename().string() << std::endl;
         }
-    } else if (result.count("file")) {
+    }
+    else if (result.count("file"))
+    {
         // Single file mode
         directory_mode = false;
         input_path = result["file"].as<std::string>();
         playlist.push_back(input_path);
-    } else {
+    }
+    else
+    {
         std::cerr << "Error: Please specify an audio file or directory"
-                            << std::endl;
+                  << std::endl;
         std::cout << options.help() << std::endl;
         return 1;
     }
 
     // Initialize SDL
-    if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+    if (SDL_Init(SDL_INIT_AUDIO) < 0)
+    {
         std::cerr << "SDL initialization failed: " << SDL_GetError() << std::endl;
         return 1;
     }
@@ -306,15 +351,17 @@ int main(int argc, char* argv[]) {
     // Initialize SDL_mixer
     int flags = MIX_INIT_MP3 | MIX_INIT_FLAC | MIX_INIT_OGG;
     int initialized = Mix_Init(flags);
-    if ((initialized & flags) != flags) {
+    if ((initialized & flags) != flags)
+    {
         std::cerr << "Warning: Some audio formats may not be available: "
-                            << Mix_GetError() << std::endl;
+                  << Mix_GetError() << std::endl;
     }
 
     // Open audio device
-    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
+    {
         std::cerr << "SDL_mixer initialization failed: " << Mix_GetError()
-                            << std::endl;
+                  << std::endl;
         SDL_Quit();
         return 1;
     }
@@ -330,7 +377,8 @@ int main(int argc, char* argv[]) {
     InitializeNcurses();
 
     // Load first track
-    if (!player.LoadFile(playlist[current_track_index])) {
+    if (!player.LoadFile(playlist[current_track_index]))
+    {
         CleanupNcurses();
         Mix_CloseAudio();
         Mix_Quit();
@@ -343,23 +391,25 @@ int main(int argc, char* argv[]) {
     bool was_playing = false;
     std::string status_message = "Press 'h' for help, 'p' to play";
 
-    while (running && !signal_received) {
+    while (running && !signal_received)
+    {
         // Draw interface
         DrawInterface(player, playlist, current_track_index, directory_mode,
-                                    status_message);
+                      status_message);
 
         // Get input (100ms timeout)
         int ch = getch();
 
         // Process command if key pressed
-        if (ch != ERR) {
+        if (ch != ERR)
+        {
             status_message = HandleCommand(ch, player, playlist, current_track_index,
-                                                                        directory_mode, running);
+                                           directory_mode, running);
         }
 
         // Check for auto-advance
         CheckAutoAdvance(player, playlist, current_track_index, directory_mode,
-                                        was_playing);
+                         was_playing);
     }
 
     // Cleanup ncurses
