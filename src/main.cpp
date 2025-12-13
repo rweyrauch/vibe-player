@@ -11,6 +11,7 @@
 #include <cstring>
 #include <ncurses.h>
 #include <csignal>
+#include <cxxopts.hpp>
 
 volatile sig_atomic_t signal_received = 0;
 
@@ -192,23 +193,41 @@ std::vector<std::string> scanDirectoryForAudio(const std::string& dirPath) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <audio_file>" << std::endl;
-        std::cerr << "       " << argv[0] << " -d <directory>" << std::endl;
-        std::cerr << "       " << argv[0] << " --directory <directory>" << std::endl;
+    // Parse command line arguments using cxxopts
+    cxxopts::Options options("cli-player", "CLI Audio Player - Play audio files from command line");
+
+    options.add_options()
+        ("d,directory", "Play all audio files in a directory", cxxopts::value<std::string>())
+        ("f,file", "Play a single audio file", cxxopts::value<std::string>())
+        ("h,help", "Print usage");
+
+    options.parse_positional({"file"});
+    options.positional_help("<audio_file>");
+
+    cxxopts::ParseResult result;
+    try {
+        result = options.parse(argc, argv);
+    } catch (const cxxopts::exceptions::exception& e) {
+        std::cerr << "Error parsing options: " << e.what() << std::endl;
+        std::cout << options.help() << std::endl;
         return 1;
     }
 
-    // Parse command line arguments
+    if (result.count("help")) {
+        std::cout << options.help() << std::endl;
+        return 0;
+    }
+
+    // Determine mode and input path
     bool directoryMode = false;
     std::string inputPath;
     std::vector<std::string> playlist;
     size_t currentTrackIndex = 0;
 
-    if (argc == 3 && (std::strcmp(argv[1], "-d") == 0 || std::strcmp(argv[1], "--directory") == 0)) {
+    if (result.count("directory")) {
         // Directory mode
         directoryMode = true;
-        inputPath = argv[2];
+        inputPath = result["directory"].as<std::string>();
         playlist = scanDirectoryForAudio(inputPath);
 
         if (playlist.empty()) {
@@ -221,11 +240,15 @@ int main(int argc, char* argv[]) {
             namespace fs = std::filesystem;
             std::cout << "  " << (i + 1) << ". " << fs::path(playlist[i]).filename().string() << std::endl;
         }
-    } else {
+    } else if (result.count("file")) {
         // Single file mode
         directoryMode = false;
-        inputPath = argv[1];
+        inputPath = result["file"].as<std::string>();
         playlist.push_back(inputPath);
+    } else {
+        std::cerr << "Error: Please specify an audio file or directory" << std::endl;
+        std::cout << options.help() << std::endl;
+        return 1;
     }
 
     // Initialize SDL

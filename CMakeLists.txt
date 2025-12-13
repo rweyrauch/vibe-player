@@ -4,6 +4,15 @@ project(cli-player VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Fetch cxxopts library
+include(FetchContent)
+FetchContent_Declare(
+    cxxopts
+    GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+    GIT_TAG v3.2.1
+)
+FetchContent_MakeAvailable(cxxopts)
+
 # Find SDL2 and SDL2_mixer
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED sdl2)
@@ -29,7 +38,12 @@ set(HEADERS
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # Link libraries
-target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${NCURSES_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}
+    ${SDL2_LIBRARIES}
+    ${SDL2_MIXER_LIBRARIES}
+    ${NCURSES_LIBRARIES}
+    cxxopts::cxxopts
+)
 target_compile_options(${PROJECT_NAME} PRIVATE ${SDL2_CFLAGS_OTHER} ${SDL2_MIXER_CFLAGS_OTHER})
 
 # Installation
