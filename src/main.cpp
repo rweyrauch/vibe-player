@@ -122,7 +122,7 @@ void DrawInterface(AudioPlayer &player,
 
     // Command help (lines 8-9)
     mvprintw(8, 0, "Commands: (p)lay (s)top (u)pause (r)resume (+/-) vol");
-    mvprintw(9, 0, "         (f)orward (b)ack (n)ext (i)nfo (h)elp (q)uit");
+    mvprintw(9, 0, "          (f)orward (b)ack (n)ext (h)elp (q)uit");
 
     // Status message (line 11)
     mvprintw(11, 0, "Status: %s", status_message.c_str());
@@ -189,9 +189,6 @@ std::string HandleCommand(int ch,
             return "Next track";
         }
         return directory_mode ? "Last track" : "Next only in directory mode";
-    case 'i':
-    case 'I':
-        return "Track info displayed above";
     default:
         return "Unknown command (press h for help)";
     }
@@ -273,8 +270,9 @@ int main(int argc, char *argv[])
     cxxopts::Options options("cli-player",
                              "CLI Audio Player - Play audio files from command line");
 
-    options.add_options()("d,directory", "Play all audio files in a directory",
-                          cxxopts::value<std::string>())("f,file", "Play a single audio file", cxxopts::value<std::string>())("h,help", "Print usage");
+    options.add_options()("d,directory", "Play all audio files in a directory", cxxopts::value<std::string>())
+                         ("f,file", "Play a single audio file", cxxopts::value<std::string>())
+                         ("h,help", "Print usage");
 
     options.parse_positional({"file"});
     options.positional_help("<audio_file>");
