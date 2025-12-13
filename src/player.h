@@ -24,6 +24,7 @@ class AudioPlayer {
   int GetPosition() const;  // position in seconds
   int GetDuration() const;  // duration in seconds
   void Cleanup();
+  void GetFrequencyLevels(float& bass, float& mid, float& treble);
 
  private:
   Mix_Music* music_;
@@ -35,8 +36,13 @@ class AudioPlayer {
   int duration_;  // duration in seconds
   std::chrono::steady_clock::time_point start_time_;
   int paused_position_;  // position when paused, in seconds
+  float bass_level_;     // 0.0 to 1.0
+  float mid_level_;      // 0.0 to 1.0
+  float treble_level_;   // 0.0 to 1.0
+  std::chrono::steady_clock::time_point last_viz_update_;
 
   void UpdatePosition();
+  void UpdateFrequencyLevels();
 };
 
 #endif  // PLAYER_H

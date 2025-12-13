@@ -50,6 +50,32 @@ void DrawProgressBar(int y, int x, int width, float progress) {
   addch(']');
 }
 
+void DrawBar(int y, int x, int width, float level) {
+  move(y, x);
+  addch('[');
+  int filled = (int)(width * level);
+  for (int i = 0; i < width; i++) {
+    addch(i < filled ? '#' : ' ');
+  }
+  addch(']');
+}
+
+void DrawFrequencyBars(int y, AudioPlayer& player) {
+  float bass, mid, treble;
+  player.GetFrequencyLevels(bass, mid, treble);
+
+  // Draw label and bars
+  mvprintw(y, 0, "Frequency: ");
+  DrawBar(y, 11, 8, bass);
+  DrawBar(y, 22, 8, mid);
+  DrawBar(y, 33, 8, treble);
+
+  // Draw frequency band labels
+  mvprintw(y + 1, 11, "Bass");
+  mvprintw(y + 1, 22, "Mid");
+  mvprintw(y + 1, 33, "Treble");
+}
+
 void DrawInterface(AudioPlayer& player,
                    const std::vector<std::string>& playlist,
                    size_t current_track_index,
@@ -81,12 +107,15 @@ void DrawInterface(AudioPlayer& player,
   float progress = dur > 0 ? (float)pos / dur : 0.0f;
   DrawProgressBar(3, 35, 20, progress);
 
-  // Command help (lines 5-6)
-  mvprintw(5, 0, "Commands: (p)lay (s)top (u)pause (r)resume (+/-) vol");
-  mvprintw(6, 0, "         (f)orward (b)ack (n)ext (i)nfo (h)elp (q)uit");
+  // Frequency visualization (lines 5-6)
+  DrawFrequencyBars(5, player);
 
-  // Status message (line 8)
-  mvprintw(8, 0, "Status: %s", status_message.c_str());
+  // Command help (lines 8-9)
+  mvprintw(8, 0, "Commands: (p)lay (s)top (u)pause (r)resume (+/-) vol");
+  mvprintw(9, 0, "         (f)orward (b)ack (n)ext (i)nfo (h)elp (q)uit");
+
+  // Status message (line 11)
+  mvprintw(11, 0, "Status: %s", status_message.c_str());
 
   refresh();
 }
