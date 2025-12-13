@@ -1,222 +1,226 @@
 #include "player.h"
-#include <iostream>
-#include <cstring>
-#include <algorithm>
-#include <cmath>
 
-AudioPlayer::AudioPlayer() 
-    : music(nullptr), chunk(nullptr), isMusic(false),
-      playing(false), paused(false), volume(1.0f), 
-      duration(0), pausedPosition(0) {
+#include <cmath>
+#include <cstring>
+
+#include <algorithm>
+#include <iostream>
+
+AudioPlayer::AudioPlayer()
+    : music_(nullptr), chunk_(nullptr), is_music_(false),
+      playing_(false), paused_(false), volume_(1.0f),
+      duration_(0), paused_position_(0) {
 }
 
 AudioPlayer::~AudioPlayer() {
-    cleanup();
+  Cleanup();
 }
 
-bool AudioPlayer::loadFile(const std::string& filename) {
-    cleanup();
+bool AudioPlayer::LoadFile(const std::string& filename) {
+  Cleanup();
 
-    // Determine file type by extension
-    std::string ext = filename.substr(filename.find_last_of(".") + 1);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+  // Determine file type by extension
+  std::string ext = filename.substr(filename.find_last_of(".") + 1);
+  std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-    if (ext == "wav") {
-        // Load as WAV chunk
-        isMusic = false;
-        chunk = Mix_LoadWAV(filename.c_str());
-        if (chunk == nullptr) {
-            std::cerr << "Error loading WAV file: " << Mix_GetError() << std::endl;
-            return false;
-        }
-        
-        // Estimate duration (rough calculation)
-        // WAV files: sample_rate * channels * bytes_per_sample * duration = total_bytes
-        // This is approximate since we don't have direct access to the audio spec
-        duration = 0; // Will be calculated during playback
-    } else {
-        // Load as music (MP3, FLAC, OGG, etc.)
-        isMusic = true;
-        music = Mix_LoadMUS(filename.c_str());
-        if (music == nullptr) {
-            std::cerr << "Error loading audio file: " << Mix_GetError() << std::endl;
-            return false;
-        }
-        
-        // SDL2_mixer doesn't provide a direct way to get duration
-        // We'll track it during playback
-        duration = 0;
+  if (ext == "wav") {
+    // Load as WAV chunk
+    is_music_ = false;
+    chunk_ = Mix_LoadWAV(filename.c_str());
+    if (chunk_ == nullptr) {
+      std::cerr << "Error loading WAV file: " << Mix_GetError() << std::endl;
+      return false;
     }
 
-    pausedPosition = 0;
-    return true;
+    // Estimate duration (rough calculation)
+    // WAV files: sample_rate * channels * bytes_per_sample * duration = total_bytes
+    // This is approximate since we don't have direct access to the audio spec
+    duration_ = 0;  // Will be calculated during playback
+  } else {
+    // Load as music (MP3, FLAC, OGG, etc.)
+    is_music_ = true;
+    music_ = Mix_LoadMUS(filename.c_str());
+    if (music_ == nullptr) {
+      std::cerr << "Error loading audio file: " << Mix_GetError() << std::endl;
+      return false;
+    }
+
+    // SDL2_mixer doesn't provide a direct way to get duration
+    // We'll track it during playback
+    duration_ = 0;
+  }
+
+  paused_position_ = 0;
+  return true;
 }
 
-void AudioPlayer::play() {
-    if (music == nullptr && chunk == nullptr) {
-        std::cerr << "No audio file loaded" << std::endl;
+void AudioPlayer::Play() {
+  if (music_ == nullptr && chunk_ == nullptr) {
+    std::cerr << "No audio file loaded" << std::endl;
+    return;
+  }
+
+  if (paused_) {
+    if (is_music_) {
+      Mix_ResumeMusic();
+    } else {
+      Mix_Resume(-1);  // Resume all channels
+    }
+    paused_ = false;
+    playing_ = true;
+    start_time_ = std::chrono::steady_clock::now() -
+                  std::chrono::seconds(paused_position_);
+  } else if (!playing_) {
+    paused_position_ = 0;
+    start_time_ = std::chrono::steady_clock::now();
+
+    if (is_music_) {
+      if (Mix_PlayMusic(music_, 0) == -1) {
+        std::cerr << "Error playing music: " << Mix_GetError() << std::endl;
         return;
-    }
-
-    if (paused) {
-        if (isMusic) {
-            Mix_ResumeMusic();
-        } else {
-            Mix_Resume(-1); // Resume all channels
-        }
-        paused = false;
-        playing = true;
-        startTime = std::chrono::steady_clock::now() - 
-                    std::chrono::seconds(pausedPosition);
-    } else if (!playing) {
-        pausedPosition = 0;
-        startTime = std::chrono::steady_clock::now();
-        
-        if (isMusic) {
-            if (Mix_PlayMusic(music, 0) == -1) {
-                std::cerr << "Error playing music: " << Mix_GetError() << std::endl;
-                return;
-            }
-        } else {
-            int channel = Mix_PlayChannel(-1, chunk, 0);
-            if (channel == -1) {
-                std::cerr << "Error playing chunk: " << Mix_GetError() << std::endl;
-                return;
-            }
-        }
-        
-        playing = true;
-        paused = false;
-    }
-    
-    // Set volume
-    setVolume(volume);
-}
-
-void AudioPlayer::pause() {
-    if (playing && !paused) {
-        if (isMusic) {
-            Mix_PauseMusic();
-        } else {
-            Mix_Pause(-1); // Pause all channels
-        }
-        paused = true;
-        updatePosition();
-        pausedPosition = getPosition();
-    }
-}
-
-void AudioPlayer::stop() {
-    if (playing || paused) {
-        if (isMusic) {
-            Mix_HaltMusic();
-        } else {
-            Mix_HaltChannel(-1); // Stop all channels
-        }
-        playing = false;
-        paused = false;
-        pausedPosition = 0;
-    }
-}
-
-bool AudioPlayer::isPlaying() const {
-    if (isMusic) {
-        return playing && !paused && Mix_PlayingMusic() != 0;
+      }
     } else {
-        return playing && !paused && Mix_Playing(-1) != 0;
+      int channel = Mix_PlayChannel(-1, chunk_, 0);
+      if (channel == -1) {
+        std::cerr << "Error playing chunk: " << Mix_GetError() << std::endl;
+        return;
+      }
     }
+
+    playing_ = true;
+    paused_ = false;
+  }
+
+  // Set volume
+  SetVolume(volume_);
 }
 
-bool AudioPlayer::isPaused() const {
-    if (isMusic) {
-        return paused && Mix_PausedMusic() != 0;
+void AudioPlayer::Pause() {
+  if (playing_ && !paused_) {
+    if (is_music_) {
+      Mix_PauseMusic();
     } else {
-        return paused && Mix_Paused(-1) != 0;
+      Mix_Pause(-1);  // Pause all channels
     }
+    paused_ = true;
+    UpdatePosition();
+    paused_position_ = GetPosition();
+  }
 }
 
-void AudioPlayer::setVolume(float vol) {
-    volume = std::max(0.0f, std::min(1.0f, vol));
-    int mixVolume = (int)(MIX_MAX_VOLUME * volume);
-    
-    if (isMusic) {
-        Mix_VolumeMusic(mixVolume);
+void AudioPlayer::Stop() {
+  if (playing_ || paused_) {
+    if (is_music_) {
+      Mix_HaltMusic();
     } else {
-        if (chunk != nullptr) {
-            Mix_VolumeChunk(chunk, mixVolume);
-        }
+      Mix_HaltChannel(-1);  // Stop all channels
     }
+    playing_ = false;
+    paused_ = false;
+    paused_position_ = 0;
+  }
 }
 
-float AudioPlayer::getVolume() const {
-    return volume;
+bool AudioPlayer::IsPlaying() const {
+  if (is_music_) {
+    return playing_ && !paused_ && Mix_PlayingMusic() != 0;
+  } else {
+    return playing_ && !paused_ && Mix_Playing(-1) != 0;
+  }
 }
 
-int AudioPlayer::getPosition() const {
-    if (!playing && !paused) {
-        return pausedPosition;
+bool AudioPlayer::IsPaused() const {
+  if (is_music_) {
+    return paused_ && Mix_PausedMusic() != 0;
+  } else {
+    return paused_ && Mix_Paused(-1) != 0;
+  }
+}
+
+void AudioPlayer::SetVolume(float vol) {
+  volume_ = std::max(0.0f, std::min(1.0f, vol));
+  int mix_volume = (int)(MIX_MAX_VOLUME * volume_);
+
+  if (is_music_) {
+    Mix_VolumeMusic(mix_volume);
+  } else {
+    if (chunk_ != nullptr) {
+      Mix_VolumeChunk(chunk_, mix_volume);
     }
-    
-    if (paused) {
-        return pausedPosition;
+  }
+}
+
+float AudioPlayer::GetVolume() const {
+  return volume_;
+}
+
+int AudioPlayer::GetPosition() const {
+  if (!playing_ && !paused_) {
+    return paused_position_;
+  }
+
+  if (paused_) {
+    return paused_position_;
+  }
+
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+      now - start_time_).count();
+  return (int)elapsed;
+}
+
+int AudioPlayer::GetDuration() const {
+  // SDL2_mixer doesn't provide duration directly
+  // This is a limitation - we'd need additional libraries for accurate duration
+  // For now, return 0 or track it during playback
+  return duration_;
+}
+
+void AudioPlayer::Seek(int position) {
+  if (is_music_) {
+    // SDL2_mixer has limited seeking support
+    // Mix_SetMusicPosition() works for some formats but not all
+    if (Mix_SetMusicPosition((double)position) == 0) {
+      paused_position_ = position;
+      if (playing_ && !paused_) {
+        start_time_ = std::chrono::steady_clock::now() -
+                      std::chrono::seconds(position);
+      }
+    } else {
+      // Seeking not supported for this format, restart from position
+      Stop();
+      paused_position_ = position;
     }
-    
+  } else {
+    // For chunks, we can't seek - would need to reload
+    // For simplicity, just restart
+    Stop();
+    paused_position_ = position;
+  }
+}
+
+void AudioPlayer::Cleanup() {
+  Stop();
+
+  if (music_ != nullptr) {
+    Mix_FreeMusic(music_);
+    music_ = nullptr;
+  }
+
+  if (chunk_ != nullptr) {
+    Mix_FreeChunk(chunk_);
+    chunk_ = nullptr;
+  }
+
+  paused_position_ = 0;
+  duration_ = 0;
+}
+
+void AudioPlayer::UpdatePosition() {
+  if (playing_ && !paused_) {
     auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
-    return (int)elapsed;
-}
-
-int AudioPlayer::getDuration() const {
-    // SDL2_mixer doesn't provide duration directly
-    // This is a limitation - we'd need additional libraries for accurate duration
-    // For now, return 0 or track it during playback
-    return duration;
-}
-
-void AudioPlayer::seek(int position) {
-    if (isMusic) {
-        // SDL2_mixer has limited seeking support
-        // Mix_SetMusicPosition() works for some formats but not all
-        if (Mix_SetMusicPosition((double)position) == 0) {
-            pausedPosition = position;
-            if (playing && !paused) {
-                startTime = std::chrono::steady_clock::now() - 
-                           std::chrono::seconds(position);
-            }
-        } else {
-            // Seeking not supported for this format, restart from position
-            stop();
-            pausedPosition = position;
-        }
-    } else {
-        // For chunks, we can't seek - would need to reload
-        // For simplicity, just restart
-        stop();
-        pausedPosition = position;
-    }
-}
-
-void AudioPlayer::cleanup() {
-    stop();
-    
-    if (music != nullptr) {
-        Mix_FreeMusic(music);
-        music = nullptr;
-    }
-    
-    if (chunk != nullptr) {
-        Mix_FreeChunk(chunk);
-        chunk = nullptr;
-    }
-    
-    pausedPosition = 0;
-    duration = 0;
-}
-
-void AudioPlayer::updatePosition() {
-    if (playing && !paused) {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
-        pausedPosition = (int)elapsed;
-    }
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+        now - start_time_).count();
+    paused_position_ = (int)elapsed;
+  }
 }
