@@ -9,25 +9,153 @@
 #include <vector>
 #include <filesystem>
 #include <cstring>
+#include <ncurses.h>
+#include <csignal>
 
-void printHelp() {
-    std::cout << "CLI Audio Player\n";
-    std::cout << "Usage: cli-player <audio_file>\n";
-    std::cout << "       cli-player -d <directory>\n";
-    std::cout << "       cli-player --directory <directory>\n";
-    std::cout << "\nCommands:\n";
-    std::cout << "  p, play     - Play audio\n";
-    std::cout << "  s, stop     - Stop audio\n";
-    std::cout << "  u, pause    - Pause audio\n";
-    std::cout << "  r, resume   - Resume audio\n";
-    std::cout << "  n, next     - Play next track (directory mode)\n";
-    std::cout << "  +, volup    - Increase volume\n";
-    std::cout << "  -, voldown   - Decrease volume\n";
-    std::cout << "  f, forward  - Forward 10 seconds\n";
-    std::cout << "  b, backward - Backward 10 seconds\n";
-    std::cout << "  i, info     - Show track info\n";
-    std::cout << "  h, help     - Show this help\n";
-    std::cout << "  q, quit     - Quit player\n";
+volatile sig_atomic_t signal_received = 0;
+
+void signalHandler(int signum) {
+    signal_received = signum;
+}
+
+void initializeNcurses() {
+    initscr();              // Initialize screen
+    cbreak();               // Disable line buffering
+    noecho();               // Don't echo input
+    keypad(stdscr, TRUE);   // Enable special keys
+    timeout(100);           // 100ms timeout for getch()
+    curs_set(0);            // Hide cursor
+}
+
+void cleanupNcurses() {
+    echo();
+    nocbreak();
+    endwin();
+}
+
+void drawProgressBar(int y, int x, int width, float progress) {
+    move(y, x);
+    addch('[');
+    int filled = (int)(width * progress);
+    for (int i = 0; i < width; i++) {
+        addch(i < filled ? '=' : ' ');
+    }
+    addch(']');
+}
+
+void drawInterface(AudioPlayer& player,
+                   const std::vector<std::string>& playlist,
+                   size_t currentTrackIndex,
+                   bool directoryMode,
+                   const std::string& statusMessage) {
+    clear();
+
+    namespace fs = std::filesystem;
+
+    // Track info (lines 0-1)
+    mvprintw(0, 0, "Now Playing: %s",
+             fs::path(playlist[currentTrackIndex]).filename().string().c_str());
+    if (directoryMode) {
+        mvprintw(1, 0, "Track %zu of %zu", currentTrackIndex + 1, playlist.size());
+    }
+
+    // Status bar (line 3)
+    const char* icon = player.isPlaying() ? ">" : player.isPaused() ? "||" : "[]";
+    int pos = player.getPosition();
+    int dur = player.getDuration();
+    float vol = player.getVolume();
+
+    mvprintw(3, 0, "[%s] %02d:%02d / %02d:%02d | Volume: %d%% | ",
+             icon, pos/60, pos%60, dur/60, dur%60, (int)(vol*100));
+
+    // Progress bar
+    float progress = dur > 0 ? (float)pos / dur : 0.0f;
+    drawProgressBar(3, 35, 20, progress);
+
+    // Command help (lines 5-6)
+    mvprintw(5, 0, "Commands: (p)lay (s)top (u)pause (r)resume (+/-) vol");
+    mvprintw(6, 0, "         (f)orward (b)ack (n)ext (i)nfo (h)elp (q)uit");
+
+    // Status message (line 8)
+    mvprintw(8, 0, "Status: %s", statusMessage.c_str());
+
+    refresh();
+}
+
+std::string handleCommand(int ch,
+                          AudioPlayer& player,
+                          std::vector<std::string>& playlist,
+                          size_t& currentTrackIndex,
+                          bool directoryMode,
+                          bool& running) {
+    namespace fs = std::filesystem;
+
+    switch (ch) {
+        case 'q': case 'Q':
+            running = false;
+            return "Quitting...";
+        case 'h': case 'H':
+            return "Press keys for commands (no Enter needed)";
+        case 'p': case 'P':
+            player.play();
+            return "Playing...";
+        case 's': case 'S':
+            player.stop();
+            return "Stopped";
+        case 'u': case 'U':
+            player.pause();
+            return "Paused";
+        case 'r': case 'R':
+            player.play();
+            return "Resumed";
+        case '+':
+            player.setVolume(std::min(1.0f, player.getVolume() + 0.1f));
+            return "Volume up";
+        case '-':
+            player.setVolume(std::max(0.0f, player.getVolume() - 0.1f));
+            return "Volume down";
+        case 'f': case 'F':
+            player.seek(player.getPosition() + 10);
+            return "Forward 10s";
+        case 'b': case 'B':
+            player.seek(std::max(0, player.getPosition() - 10));
+            return "Back 10s";
+        case 'n': case 'N':
+            if (directoryMode && currentTrackIndex < playlist.size() - 1) {
+                currentTrackIndex++;
+                player.cleanup();
+                player.loadFile(playlist[currentTrackIndex]);
+                player.play();
+                return "Next track";
+            }
+            return directoryMode ? "Last track" : "Next only in directory mode";
+        case 'i': case 'I':
+            return "Track info displayed above";
+        default:
+            return "Unknown command (press h for help)";
+    }
+}
+
+bool checkAutoAdvance(AudioPlayer& player,
+                      std::vector<std::string>& playlist,
+                      size_t& currentTrackIndex,
+                      bool directoryMode,
+                      bool& wasPlaying) {
+    if (wasPlaying && !player.isPlaying() && !player.isPaused()) {
+        wasPlaying = false;
+        if (directoryMode && currentTrackIndex < playlist.size() - 1) {
+            currentTrackIndex++;
+            player.cleanup();
+            if (player.loadFile(playlist[currentTrackIndex])) {
+                player.play();
+                wasPlaying = true;
+                return true;
+            }
+        }
+    } else if (player.isPlaying()) {
+        wasPlaying = true;
+    }
+    return false;
 }
 
 std::vector<std::string> scanDirectoryForAudio(const std::string& dirPath) {
@@ -61,26 +189,6 @@ std::vector<std::string> scanDirectoryForAudio(const std::string& dirPath) {
     }
 
     return audioFiles;
-}
-
-std::string formatTime(int seconds) {
-    int minutes = seconds / 60;
-    int secs = seconds % 60;
-    std::ostringstream oss;
-    oss << std::setfill('0') << std::setw(2) << minutes << ":" 
-        << std::setfill('0') << std::setw(2) << secs;
-    return oss.str();
-}
-
-void printStatus(AudioPlayer& player) {
-    int position = player.getPosition();
-    int duration = player.getDuration();
-    float vol = player.getVolume();
-    
-    std::cout << "\r[" << (player.isPlaying() ? "▶" : player.isPaused() ? "⏸" : "⏹") << "] "
-              << formatTime(position) << " / " << formatTime(duration) 
-              << " | Volume: " << std::fixed << std::setprecision(0) << (vol * 100) << "%"
-              << std::flush;
 }
 
 int main(int argc, char* argv[]) {
@@ -142,117 +250,47 @@ int main(int argc, char* argv[]) {
 
     AudioPlayer player;
 
+    // Setup signal handlers
+    signal(SIGINT, signalHandler);
+    signal(SIGTERM, signalHandler);
+    atexit(cleanupNcurses);
+
+    // Initialize ncurses
+    initializeNcurses();
+
+    // Load first track
     if (!player.loadFile(playlist[currentTrackIndex])) {
+        cleanupNcurses();
+        Mix_CloseAudio();
+        Mix_Quit();
         SDL_Quit();
         return 1;
     }
 
-    namespace fs = std::filesystem;
-    std::cout << "\nNow playing: " << fs::path(playlist[currentTrackIndex]).filename().string() << std::endl;
-    if (directoryMode) {
-        std::cout << "Track " << (currentTrackIndex + 1) << " of " << playlist.size() << std::endl;
-    }
-    std::cout << "Type 'h' or 'help' for commands" << std::endl;
-
-    // Start status update thread
+    // Main event loop
     bool running = true;
     bool wasPlaying = false;
-    std::thread statusThread([&]() {
-        while (running) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            if (player.isPlaying() || player.isPaused()) {
-                printStatus(player);
-                wasPlaying = true;
-            } else if (wasPlaying && directoryMode && currentTrackIndex < playlist.size() - 1) {
-                // Track finished, auto-advance to next track
-                wasPlaying = false;
-                currentTrackIndex++;
-                player.cleanup();
-                if (player.loadFile(playlist[currentTrackIndex])) {
-                    std::cout << "\n\nNow playing: " << fs::path(playlist[currentTrackIndex]).filename().string() << std::endl;
-                    std::cout << "Track " << (currentTrackIndex + 1) << " of " << playlist.size() << std::endl;
-                    player.play();
-                }
-            } else if (wasPlaying) {
-                wasPlaying = false;
-            }
+    std::string statusMessage = "Press 'h' for help, 'p' to play";
+
+    while (running && !signal_received) {
+        // Draw interface
+        drawInterface(player, playlist, currentTrackIndex, directoryMode, statusMessage);
+
+        // Get input (100ms timeout)
+        int ch = getch();
+
+        // Process command if key pressed
+        if (ch != ERR) {
+            statusMessage = handleCommand(ch, player, playlist, currentTrackIndex,
+                                         directoryMode, running);
         }
-    });
 
-    // Command loop
-    std::string command;
-    while (running) {
-        std::cout << "\n> ";
-        std::getline(std::cin, command);
-
-        // Convert to lowercase
-        std::transform(command.begin(), command.end(), command.begin(), ::tolower);
-
-        if (command == "q" || command == "quit") {
-            running = false;
-            break;
-        } else if (command == "h" || command == "help") {
-            printHelp();
-        } else if (command == "p" || command == "play") {
-            player.play();
-            std::cout << "Playing..." << std::endl;
-        } else if (command == "s" || command == "stop") {
-            player.stop();
-            std::cout << "Stopped" << std::endl;
-        } else if (command == "u" || command == "pause") {
-            player.pause();
-            std::cout << "Paused" << std::endl;
-        } else if (command == "r" || command == "resume") {
-            player.play();
-            std::cout << "Resumed" << std::endl;
-        } else if (command == "+" || command == "volup") {
-            float vol = player.getVolume();
-            player.setVolume(std::min(1.0f, vol + 0.1f));
-            std::cout << "Volume: " << (int)(player.getVolume() * 100) << "%" << std::endl;
-        } else if (command == "-" || command == "voldown") {
-            float vol = player.getVolume();
-            player.setVolume(std::max(0.0f, vol - 0.1f));
-            std::cout << "Volume: " << (int)(player.getVolume() * 100) << "%" << std::endl;
-        } else if (command == "f" || command == "forward") {
-            int pos = player.getPosition();
-            player.seek(pos + 10);
-            std::cout << "Forwarded 10 seconds" << std::endl;
-        } else if (command == "b" || command == "backward") {
-            int pos = player.getPosition();
-            player.seek(std::max(0, pos - 10));
-            std::cout << "Rewinded 10 seconds" << std::endl;
-        } else if (command == "n" || command == "next") {
-            if (directoryMode && currentTrackIndex < playlist.size() - 1) {
-                currentTrackIndex++;
-                player.cleanup();
-                if (player.loadFile(playlist[currentTrackIndex])) {
-                    std::cout << "\nNow playing: " << fs::path(playlist[currentTrackIndex]).filename().string() << std::endl;
-                    std::cout << "Track " << (currentTrackIndex + 1) << " of " << playlist.size() << std::endl;
-                    player.play();
-                }
-            } else if (directoryMode) {
-                std::cout << "Already at the last track" << std::endl;
-            } else {
-                std::cout << "Next command only available in directory mode" << std::endl;
-            }
-        } else if (command == "i" || command == "info") {
-            std::cout << "\nTrack Info:" << std::endl;
-            std::cout << "  File: " << fs::path(playlist[currentTrackIndex]).filename().string() << std::endl;
-            if (directoryMode) {
-                std::cout << "  Track: " << (currentTrackIndex + 1) << " of " << playlist.size() << std::endl;
-            }
-            std::cout << "  Duration: " << formatTime(player.getDuration()) << std::endl;
-            std::cout << "  Position: " << formatTime(player.getPosition()) << std::endl;
-            std::cout << "  Volume: " << (int)(player.getVolume() * 100) << "%" << std::endl;
-            std::cout << "  Status: " << (player.isPlaying() ? "Playing" :
-                                         player.isPaused() ? "Paused" : "Stopped") << std::endl;
-        } else if (!command.empty()) {
-            std::cout << "Unknown command. Type 'h' for help." << std::endl;
-        }
+        // Check for auto-advance
+        checkAutoAdvance(player, playlist, currentTrackIndex, directoryMode, wasPlaying);
     }
 
-    running = false;
-    statusThread.join();
+    // Cleanup ncurses
+    cleanupNcurses();
     
     player.cleanup();
     Mix_CloseAudio();
