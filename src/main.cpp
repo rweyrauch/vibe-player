@@ -34,6 +34,27 @@ void InitializeNcurses()
     keypad(stdscr, TRUE); // Enable special keys
     timeout(100);         // 100ms timeout for getch()
     curs_set(0);          // Hide cursor
+
+    // Initialize color support if available
+    if (has_colors())
+    {
+        start_color();
+        use_default_colors();
+
+        // Status icon colors
+        init_pair(1, COLOR_GREEN, -1);
+        init_pair(2, COLOR_YELLOW, -1);
+        init_pair(3, COLOR_RED, -1);
+
+        // Frequency bar gradient: cyan → blue → magenta
+        init_pair(4, COLOR_CYAN, -1);
+        init_pair(5, COLOR_MAGENTA, -1);
+        init_pair(6, COLOR_BLUE, -1);
+
+        // Status message colors
+        init_pair(7, COLOR_GREEN, -1);
+        init_pair(8, COLOR_RED, -1);
+    }
 }
 
 void CleanupNcurses()
@@ -55,9 +76,16 @@ void DrawProgressBar(int y, int x, int width, float progress)
     addch(']');
 }
 
-void DrawBar(int y, int x, int width, float level)
+void DrawBar(int y, int x, int width, float level, int color_pair = 0)
 {
     move(y, x);
+
+    // Apply color if specified and colors are available
+    if (color_pair > 0 && has_colors())
+    {
+        attron(COLOR_PAIR(color_pair));
+    }
+
     addch('[');
     int filled = (int)(width * level);
     for (int i = 0; i < width; i++)
@@ -65,6 +93,12 @@ void DrawBar(int y, int x, int width, float level)
         addch(i < filled ? '#' : ' ');
     }
     addch(']');
+
+    // Turn off color attributes
+    if (color_pair > 0 && has_colors())
+    {
+        attroff(COLOR_PAIR(color_pair));
+    }
 }
 
 void DrawFrequencyBars(int y, AudioPlayer &player)
@@ -72,16 +106,34 @@ void DrawFrequencyBars(int y, AudioPlayer &player)
     float bass, mid, treble;
     player.GetFrequencyLevels(bass, mid, treble);
 
-    // Draw label and bars
     mvprintw(y, 0, "Frequency: ");
-    DrawBar(y, 11, 8, bass);
-    DrawBar(y, 22, 8, mid);
-    DrawBar(y, 33, 8, treble);
 
-    // Draw frequency band labels
-    mvprintw(y + 1, 11, "Bass");
-    mvprintw(y + 1, 22, "Mid");
-    mvprintw(y + 1, 33, "Treble");
+    // Draw bars with gradient colors
+    DrawBar(y, 11, 8, bass, 4);   // Cyan
+    DrawBar(y, 22, 8, mid, 6);    // Blue
+    DrawBar(y, 33, 8, treble, 5); // Magenta
+
+    // Color the labels to match their bars
+    if (has_colors())
+    {
+        attron(COLOR_PAIR(4));
+        mvprintw(y + 1, 11, "Bass");
+        attroff(COLOR_PAIR(4));
+
+        attron(COLOR_PAIR(6));
+        mvprintw(y + 1, 22, "Mid");
+        attroff(COLOR_PAIR(6));
+
+        attron(COLOR_PAIR(5));
+        mvprintw(y + 1, 33, "Treble");
+        attroff(COLOR_PAIR(5));
+    }
+    else
+    {
+        mvprintw(y + 1, 11, "Bass");
+        mvprintw(y + 1, 22, "Mid");
+        mvprintw(y + 1, 33, "Treble");
+    }
 }
 
 void DrawInterface(AudioPlayer &player,
@@ -110,8 +162,32 @@ void DrawInterface(AudioPlayer &player,
     int dur = player.GetDuration();
     float vol = player.GetVolume();
 
-    mvprintw(3, 0, "[%s] %02d:%02d / %02d:%02d | Volume: %d%% | ",
-             icon, pos / 60, pos % 60, dur / 60, dur % 60, (int)(vol * 100));
+    // Determine icon color
+    int icon_color = 0;
+    if (has_colors())
+    {
+        if (player.IsPlaying())
+            icon_color = 1; // Green
+        else if (player.IsPaused())
+            icon_color = 2; // Yellow
+        else
+            icon_color = 3; // Red
+    }
+
+    // Print status bar with colored icon
+    mvprintw(3, 0, "[");
+    if (icon_color > 0)
+    {
+        attron(COLOR_PAIR(icon_color));
+        printw("%s", icon);
+        attroff(COLOR_PAIR(icon_color));
+    }
+    else
+    {
+        printw("%s", icon);
+    }
+    printw("] %02d:%02d / %02d:%02d | Volume: %d%% | ",
+           pos / 60, pos % 60, dur / 60, dur % 60, (int)(vol * 100));
 
     // Progress bar
     float progress = dur > 0 ? (float)pos / dur : 0.0f;
@@ -125,7 +201,41 @@ void DrawInterface(AudioPlayer &player,
     mvprintw(9, 0, "          (f)orward (b)ack (n)ext (h)elp (q)uit");
 
     // Status message (line 11)
-    mvprintw(11, 0, "Status: %s", status_message.c_str());
+    int msg_color = 0;
+    if (has_colors())
+    {
+        // Success messages (green)
+        if (status_message.find("Playing") != std::string::npos ||
+            status_message.find("Resumed") != std::string::npos ||
+            status_message.find("Volume") != std::string::npos ||
+            status_message.find("Next track") != std::string::npos ||
+            status_message.find("Forward") != std::string::npos ||
+            status_message.find("Back") != std::string::npos)
+        {
+            msg_color = 7; // Green
+        }
+        // Warning/error messages (red)
+        else if (status_message.find("Unknown") != std::string::npos ||
+                 status_message.find("Last track") != std::string::npos ||
+                 status_message.find("only in directory mode") != std::string::npos ||
+                 status_message.find("Stopped") != std::string::npos ||
+                 status_message.find("Paused") != std::string::npos)
+        {
+            msg_color = 8; // Red
+        }
+    }
+
+    mvprintw(11, 0, "Status: ");
+    if (msg_color > 0)
+    {
+        attron(COLOR_PAIR(msg_color));
+        printw("%s", status_message.c_str());
+        attroff(COLOR_PAIR(msg_color));
+    }
+    else
+    {
+        printw("%s", status_message.c_str());
+    }
 
     refresh();
 }
