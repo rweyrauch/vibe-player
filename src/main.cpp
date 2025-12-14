@@ -14,8 +14,6 @@
 #include <vector>
 
 #include <ncurses.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
 
 #include <cxxopts.hpp>
 
@@ -458,31 +456,6 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Initialize SDL
-    if (SDL_Init(SDL_INIT_AUDIO) < 0)
-    {
-        std::cerr << "SDL initialization failed: " << SDL_GetError() << std::endl;
-        return 1;
-    }
-
-    // Initialize SDL_mixer
-    int flags = MIX_INIT_MP3 | MIX_INIT_FLAC | MIX_INIT_OGG;
-    int initialized = Mix_Init(flags);
-    if ((initialized & flags) != flags)
-    {
-        std::cerr << "Warning: Some audio formats may not be available: "
-                  << Mix_GetError() << std::endl;
-    }
-
-    // Open audio device
-    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0)
-    {
-        std::cerr << "SDL_mixer initialization failed: " << Mix_GetError()
-                  << std::endl;
-        SDL_Quit();
-        return 1;
-    }
-
     AudioPlayer player;
 
     // Setup signal handlers
@@ -497,9 +470,6 @@ int main(int argc, char *argv[])
     if (!player.LoadFile(playlist[current_track_index]))
     {
         CleanupNcurses();
-        Mix_CloseAudio();
-        Mix_Quit();
-        SDL_Quit();
         return 1;
     }
 
@@ -533,9 +503,6 @@ int main(int argc, char *argv[])
     CleanupNcurses();
 
     player.Cleanup();
-    Mix_CloseAudio();
-    Mix_Quit();
-    SDL_Quit();
 
     std::cout << "\nGoodbye!" << std::endl;
     return 0;

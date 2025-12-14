@@ -4,24 +4,32 @@ project(cli-player VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Fetch cxxopts library
+# Fetch libraries
 include(FetchContent)
+
+# Fetch cxxopts library
 FetchContent_Declare(
     cxxopts
     GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
     GIT_TAG v3.2.1
 )
-FetchContent_MakeAvailable(cxxopts)
 
-# Find SDL2 and SDL2_mixer
+# Fetch miniaudio library
+FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG master
+)
+
+FetchContent_MakeAvailable(cxxopts miniaudio)
+
+# Find ncurses
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(SDL2 REQUIRED sdl2)
-pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
 pkg_check_modules(NCURSES REQUIRED ncurses)
 
 # Include directories
-include_directories(${SDL2_INCLUDE_DIRS})
-include_directories(${SDL2_MIXER_INCLUDE_DIRS})
+include_directories(${miniaudio_SOURCE_DIR})
+include_directories(${miniaudio_SOURCE_DIR}/extras)
 include_directories(${NCURSES_INCLUDE_DIRS})
 
 # Source files
@@ -39,12 +47,12 @@ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME}
-    ${SDL2_LIBRARIES}
-    ${SDL2_MIXER_LIBRARIES}
     ${NCURSES_LIBRARIES}
     cxxopts::cxxopts
+    pthread
+    m
+    dl
 )
-target_compile_options(${PROJECT_NAME} PRIVATE ${SDL2_CFLAGS_OTHER} ${SDL2_MIXER_CFLAGS_OTHER})
 
 # Installation
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
@@ -62,7 +70,7 @@ set(CPACK_PACKAGE_VENDOR "Rick Weyrauch")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Rick Weyrauch <rpweyrauch@gmail.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libsdl2-2.0-0, libsdl2-mixer-2.0-0, libncurses6")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libncurses6")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rpweyrauch/cli-player")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 

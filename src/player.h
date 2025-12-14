@@ -1,12 +1,10 @@
-
 #ifndef PLAYER_H
 #define PLAYER_H
 
 #include <chrono>
 #include <string>
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include "miniaudio.h"
 
 class AudioPlayer
 {
@@ -29,15 +27,17 @@ public:
     void GetFrequencyLevels(float &bass, float &mid, float &treble);
 
 private:
-    Mix_Music *music_;
-    Mix_Chunk *chunk_;
-    bool is_music_; // true for music (MP3, FLAC, OGG), false for WAV
+    ma_decoder decoder_;
+    ma_device device_;
+    bool decoder_initialized_;
+    bool device_initialized_;
     bool playing_;
     bool paused_;
     float volume_;
     int duration_; // duration in seconds
     std::chrono::steady_clock::time_point start_time_;
     int paused_position_; // position when paused, in seconds
+    ma_uint64 paused_frame_; // frame position when paused
     float bass_level_;    // 0.0 to 1.0
     float mid_level_;     // 0.0 to 1.0
     float treble_level_;  // 0.0 to 1.0
@@ -45,6 +45,8 @@ private:
 
     void UpdatePosition();
     void UpdateFrequencyLevels();
+
+    static void DataCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 };
 
 #endif // PLAYER_H

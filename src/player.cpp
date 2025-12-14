@@ -1,3 +1,7 @@
+// Include stb_vorbis before miniaudio to enable OGG support
+#include "extras/stb_vorbis.c"
+
+#define MINIAUDIO_IMPLEMENTATION
 #include "player.h"
 
 #include <cmath>
@@ -7,13 +11,49 @@
 #include <algorithm>
 #include <iostream>
 
+void AudioPlayer::DataCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
+{
+    AudioPlayer* pPlayer = (AudioPlayer*)pDevice->pUserData;
+    if (pPlayer == nullptr || !pPlayer->decoder_initialized_) {
+        return;
+    }
+
+    // If paused, output silence
+    if (pPlayer->paused_) {
+        memset(pOutput, 0, frameCount * ma_get_bytes_per_frame(pDevice->playback.format, pDevice->playback.channels));
+        return;
+    }
+
+    // Decode frames with volume control
+    ma_uint64 framesRead = 0;
+    ma_decoder_read_pcm_frames(&pPlayer->decoder_, pOutput, frameCount, &framesRead);
+
+    // Apply volume
+    if (pPlayer->volume_ < 1.0f) {
+        float* pSamples = (float*)pOutput;
+        ma_uint64 sampleCount = framesRead * pDevice->playback.channels;
+        for (ma_uint64 i = 0; i < sampleCount; ++i) {
+            pSamples[i] *= pPlayer->volume_;
+        }
+    }
+
+    // If we read fewer frames than requested, we've reached the end
+    if (framesRead < frameCount) {
+        pPlayer->playing_ = false;
+    }
+
+    (void)pInput;  // Unused
+}
+
 AudioPlayer::AudioPlayer()
-    : music_(nullptr), chunk_(nullptr), is_music_(false),
+    : decoder_initialized_(false), device_initialized_(false),
       playing_(false), paused_(false), volume_(1.0f),
-      duration_(0), paused_position_(0),
+      duration_(0), paused_position_(0), paused_frame_(0),
       bass_level_(0.0f), mid_level_(0.0f), treble_level_(0.0f)
 {
     last_viz_update_ = std::chrono::steady_clock::now();
+    memset(&decoder_, 0, sizeof(decoder_));
+    memset(&device_, 0, sizeof(device_));
 }
 
 AudioPlayer::~AudioPlayer()
@@ -25,183 +65,122 @@ bool AudioPlayer::LoadFile(const std::string &filename)
 {
     Cleanup();
 
-    // Determine file type by extension
-    std::string ext = filename.substr(filename.find_last_of(".") + 1);
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    // Initialize decoder
+    ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
+    ma_result result = ma_decoder_init_file(filename.c_str(), &decoderConfig, &decoder_);
 
-    if (ext == "wav")
-    {
-        // Load as WAV chunk
-        is_music_ = false;
-        chunk_ = Mix_LoadWAV(filename.c_str());
-        if (chunk_ == nullptr)
-        {
-            std::cerr << "Error loading WAV file: " << Mix_GetError() << std::endl;
-            return false;
-        }
-
-        // Estimate duration (rough calculation)
-        // WAV files: sample_rate * channels * bytes_per_sample * duration = total_bytes
-        // This is approximate since we don't have direct access to the audio spec
-        duration_ = 0; // Will be calculated during playback
-    }
-    else
-    {
-        // Load as music (MP3, FLAC, OGG, etc.)
-        is_music_ = true;
-        music_ = Mix_LoadMUS(filename.c_str());
-        if (music_ == nullptr)
-        {
-            std::cerr << "Error loading audio file: " << Mix_GetError() << std::endl;
-            return false;
-        }
-
-        // Get duration using Mix_MusicDuration (available in SDL_mixer 2.6+)
-        double duration_seconds = Mix_MusicDuration(music_);
-        if (duration_seconds > 0)
-        {
-            duration_ = static_cast<int>(duration_seconds);
-        }
-        else
-        {
-            duration_ = 0; // Unknown duration
-        }
+    if (result != MA_SUCCESS) {
+        std::cerr << "Error loading audio file: " << filename << " (error code: " << result << ")" << std::endl;
+        return false;
     }
 
+    decoder_initialized_ = true;
+
+    // Get duration
+    ma_uint64 lengthInFrames;
+    result = ma_decoder_get_length_in_pcm_frames(&decoder_, &lengthInFrames);
+    if (result == MA_SUCCESS) {
+        duration_ = static_cast<int>(lengthInFrames / decoder_.outputSampleRate);
+    } else {
+        duration_ = 0;
+    }
+
+    // Initialize device
+    ma_device_config deviceConfig = ma_device_config_init(ma_device_type_playback);
+    deviceConfig.playback.format = decoder_.outputFormat;
+    deviceConfig.playback.channels = decoder_.outputChannels;
+    deviceConfig.sampleRate = decoder_.outputSampleRate;
+    deviceConfig.dataCallback = DataCallback;
+    deviceConfig.pUserData = this;
+
+    result = ma_device_init(NULL, &deviceConfig, &device_);
+    if (result != MA_SUCCESS) {
+        std::cerr << "Error initializing audio device" << std::endl;
+        ma_decoder_uninit(&decoder_);
+        decoder_initialized_ = false;
+        return false;
+    }
+
+    device_initialized_ = true;
     paused_position_ = 0;
+    paused_frame_ = 0;
+
     return true;
 }
 
 void AudioPlayer::Play()
 {
-    if (music_ == nullptr && chunk_ == nullptr)
-    {
+    if (!decoder_initialized_ || !device_initialized_) {
         std::cerr << "No audio file loaded" << std::endl;
         return;
     }
 
-    if (paused_)
-    {
-        if (is_music_)
-        {
-            Mix_ResumeMusic();
-        }
-        else
-        {
-            Mix_Resume(-1); // Resume all channels
-        }
+    if (paused_) {
+        // Resume from pause
         paused_ = false;
         playing_ = true;
-        start_time_ = std::chrono::steady_clock::now() -
-                      std::chrono::seconds(paused_position_);
-    }
-    else if (!playing_)
-    {
+        start_time_ = std::chrono::steady_clock::now() - std::chrono::seconds(paused_position_);
+    } else if (!playing_) {
+        // Start playback
         paused_position_ = 0;
+        paused_frame_ = 0;
         start_time_ = std::chrono::steady_clock::now();
 
-        if (is_music_)
-        {
-            if (Mix_PlayMusic(music_, 0) == -1)
-            {
-                std::cerr << "Error playing music: " << Mix_GetError() << std::endl;
-                return;
-            }
-        }
-        else
-        {
-            int channel = Mix_PlayChannel(-1, chunk_, 0);
-            if (channel == -1)
-            {
-                std::cerr << "Error playing chunk: " << Mix_GetError() << std::endl;
-                return;
-            }
+        ma_result result = ma_device_start(&device_);
+        if (result != MA_SUCCESS) {
+            std::cerr << "Error starting playback" << std::endl;
+            return;
         }
 
         playing_ = true;
         paused_ = false;
     }
-
-    // Set volume
-    SetVolume(volume_);
 }
 
 void AudioPlayer::Pause()
 {
-    if (playing_ && !paused_)
-    {
-        if (is_music_)
-        {
-            Mix_PauseMusic();
-        }
-        else
-        {
-            Mix_Pause(-1); // Pause all channels
-        }
+    if (playing_ && !paused_) {
         paused_ = true;
         UpdatePosition();
         paused_position_ = GetPosition();
+
+        // Get current frame position
+        ma_decoder_get_cursor_in_pcm_frames(&decoder_, &paused_frame_);
     }
 }
 
 void AudioPlayer::Stop()
 {
-    if (playing_ || paused_)
-    {
-        if (is_music_)
-        {
-            Mix_HaltMusic();
+    if (playing_ || paused_) {
+        if (device_initialized_) {
+            ma_device_stop(&device_);
         }
-        else
-        {
-            Mix_HaltChannel(-1); // Stop all channels
+
+        // Reset decoder to beginning
+        if (decoder_initialized_) {
+            ma_decoder_seek_to_pcm_frame(&decoder_, 0);
         }
+
         playing_ = false;
         paused_ = false;
         paused_position_ = 0;
+        paused_frame_ = 0;
     }
 }
 
 bool AudioPlayer::IsPlaying() const
 {
-    if (is_music_)
-    {
-        return playing_ && !paused_ && Mix_PlayingMusic() != 0;
-    }
-    else
-    {
-        return playing_ && !paused_ && Mix_Playing(-1) != 0;
-    }
+    return playing_ && !paused_ && device_initialized_ && ma_device_is_started(&device_);
 }
 
 bool AudioPlayer::IsPaused() const
 {
-    if (is_music_)
-    {
-        return paused_ && Mix_PausedMusic() != 0;
-    }
-    else
-    {
-        return paused_ && Mix_Paused(-1) != 0;
-    }
+    return paused_;
 }
 
 void AudioPlayer::SetVolume(float vol)
 {
     volume_ = std::max(0.0f, std::min(1.0f, vol));
-    int mix_volume = (int)(MIX_MAX_VOLUME * volume_);
-
-    if (is_music_)
-    {
-        Mix_VolumeMusic(mix_volume);
-    }
-    else
-    {
-        if (chunk_ != nullptr)
-        {
-            Mix_VolumeChunk(chunk_, mix_volume);
-        }
-    }
 }
 
 float AudioPlayer::GetVolume() const
@@ -211,59 +190,42 @@ float AudioPlayer::GetVolume() const
 
 int AudioPlayer::GetPosition() const
 {
-    if (!playing_ && !paused_)
-    {
+    if (!playing_ && !paused_) {
         return paused_position_;
     }
 
-    if (paused_)
-    {
+    if (paused_) {
         return paused_position_;
     }
 
     auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-                       now - start_time_)
-                       .count();
-    return (int)elapsed;
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time_).count();
+    return static_cast<int>(elapsed);
 }
 
 int AudioPlayer::GetDuration() const
 {
-    // SDL2_mixer doesn't provide duration directly
-    // This is a limitation - we'd need additional libraries for accurate duration
-    // For now, return 0 or track it during playback
     return duration_;
 }
 
 void AudioPlayer::Seek(int position)
 {
-    if (is_music_)
-    {
-        // SDL2_mixer has limited seeking support
-        // Mix_SetMusicPosition() works for some formats but not all
-        if (Mix_SetMusicPosition((double)position) == 0)
-        {
-            paused_position_ = position;
-            if (playing_ && !paused_)
-            {
-                start_time_ = std::chrono::steady_clock::now() -
-                              std::chrono::seconds(position);
-            }
-        }
-        else
-        {
-            // Seeking not supported for this format, restart from position
-            Stop();
-            paused_position_ = position;
-        }
+    if (!decoder_initialized_) {
+        return;
     }
-    else
-    {
-        // For chunks, we can't seek - would need to reload
-        // For simplicity, just restart
-        Stop();
+
+    ma_uint64 targetFrame = static_cast<ma_uint64>(position) * decoder_.outputSampleRate;
+    ma_result result = ma_decoder_seek_to_pcm_frame(&decoder_, targetFrame);
+
+    if (result == MA_SUCCESS) {
         paused_position_ = position;
+        paused_frame_ = targetFrame;
+
+        if (playing_ && !paused_) {
+            start_time_ = std::chrono::steady_clock::now() - std::chrono::seconds(position);
+        }
+    } else {
+        std::cerr << "Seek failed" << std::endl;
     }
 }
 
@@ -271,31 +233,27 @@ void AudioPlayer::Cleanup()
 {
     Stop();
 
-    if (music_ != nullptr)
-    {
-        Mix_FreeMusic(music_);
-        music_ = nullptr;
+    if (device_initialized_) {
+        ma_device_uninit(&device_);
+        device_initialized_ = false;
     }
 
-    if (chunk_ != nullptr)
-    {
-        Mix_FreeChunk(chunk_);
-        chunk_ = nullptr;
+    if (decoder_initialized_) {
+        ma_decoder_uninit(&decoder_);
+        decoder_initialized_ = false;
     }
 
     paused_position_ = 0;
+    paused_frame_ = 0;
     duration_ = 0;
 }
 
 void AudioPlayer::UpdatePosition()
 {
-    if (playing_ && !paused_)
-    {
+    if (playing_ && !paused_) {
         auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-                           now - start_time_)
-                           .count();
-        paused_position_ = (int)elapsed;
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time_).count();
+        paused_position_ = static_cast<int>(elapsed);
     }
 }
 
@@ -311,8 +269,7 @@ void AudioPlayer::GetFrequencyLevels(float &bass, float &mid, float &treble)
 
 void AudioPlayer::UpdateFrequencyLevels()
 {
-    if (!playing_ || paused_)
-    {
+    if (!playing_ || paused_) {
         // Decay towards zero when not playing
         bass_level_ *= 0.9f;
         mid_level_ *= 0.9f;
@@ -322,19 +279,13 @@ void AudioPlayer::UpdateFrequencyLevels()
 
     // Simulate frequency content based on volume and time
     auto now = std::chrono::steady_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                  now - last_viz_update_)
-                  .count();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_viz_update_).count();
 
-    if (ms > 50)
-    { // Update every 50ms
+    if (ms > 50) { // Update every 50ms
         // Simple random walk with smoothing to create animated bars
-        bass_level_ = bass_level_ * 0.7f +
-                      (static_cast<float>(rand() % 100) / 100.0f) * 0.3f;
-        mid_level_ = mid_level_ * 0.7f +
-                     (static_cast<float>(rand() % 100) / 100.0f) * 0.3f;
-        treble_level_ = treble_level_ * 0.7f +
-                        (static_cast<float>(rand() % 100) / 100.0f) * 0.3f;
+        bass_level_ = bass_level_ * 0.7f + (static_cast<float>(rand() % 100) / 100.0f) * 0.3f;
+        mid_level_ = mid_level_ * 0.7f + (static_cast<float>(rand() % 100) / 100.0f) * 0.3f;
+        treble_level_ = treble_level_ * 0.7f + (static_cast<float>(rand() % 100) / 100.0f) * 0.3f;
 
         // Apply volume scaling
         float vol_factor = volume_;
