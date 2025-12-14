@@ -19,12 +19,19 @@
 #endif
 
 #include <cxxopts.hpp>
+#include <colors.h>
 
 volatile sig_atomic_t signal_received = 0;
 
 void SignalHandler(int signum)
 {
     signal_received = signum;
+}
+
+void cleanup()
+{
+    set_mouse_mode(false);
+    set_raw_mode(false);
 }
 
 void PrintHelp()
@@ -51,25 +58,25 @@ void PrintStatus(AudioPlayer &player,
 {
     namespace fs = std::filesystem;
 
-    int pos = player.GetPosition();
-    int dur = player.GetDuration();
-    float vol = player.GetVolume();
+    int pos = player.getPosition();
+    int dur = player.getDuration();
+    float vol = player.getVolume();
 
     std::string state;
-    if (player.IsPlaying())
+    if (player.isPlaying())
         state = "Playing";
-    else if (player.IsPaused())
+    else if (player.isPaused())
         state = "Paused";
     else
         state = "Stopped";
 
     std::cout << "\r[" << state << "] "
               << fs::path(playlist[current_track_index]).filename().string()
-              << " | " << std::setfill('0') << std::setw(2) << (pos / 60) << ":"
-              << std::setw(2) << (pos % 60) << " / "
-              << std::setw(2) << (dur / 60) << ":"
-              << std::setw(2) << (dur % 60)
-              << " | Vol: " << std::setw(3) << (int)(vol * 100) << "%";
+              << " | " << std::setfill('0') << std::setw(2) << (pos / 60000) << ":"
+              << std::setw(2) << ((pos/1000) % 60) << " / "
+              << std::setw(2) << ((dur/1000) / 60) << ":"
+              << std::setw(2) << ((dur/1000) % 60)
+              << " | Vol: " << std::setfill(' ') << std::setw(3) << (int)(vol * 100) << "%";
 
     if (directory_mode)
     {
@@ -79,72 +86,62 @@ void PrintStatus(AudioPlayer &player,
     std::cout << "          " << std::flush;
 }
 
-std::string HandleCommand(char ch,
+bool HandleCommand(char ch,
                           AudioPlayer &player,
                           std::vector<std::string> &playlist,
                           size_t &current_track_index,
-                          bool directory_mode,
-                          bool &running)
+                          bool directory_mode)
 {
-    namespace fs = std::filesystem;
+    bool running = true;
 
-    switch (ch)
+    const auto cmd = std::tolower(ch);
+    switch (cmd)
     {
     case 'q':
-    case 'Q':
         running = false;
-        return "Quitting...";
+        std::cout << "\n";        
+        break;
     case 'h':
-    case 'H':
         PrintHelp();
-        return "Help displayed";
+        break;
     case 'p':
-    case 'P':
-        player.Play();
-        return "Playing";
+        player.play();
+        break;
     case 's':
-    case 'S':
-        player.Stop();
-        return "Stopped";
+        player.stop();
+        break;
     case 'u':
-    case 'U':
-        player.Pause();
-        return "Paused";
+        player.pause();
+        break;
     case 'r':
-    case 'R':
-        player.Play();
-        return "Resumed";
+        player.play();
+        break;
     case '+':
-        player.SetVolume(std::min(1.0f, player.GetVolume() + 0.1f));
-        return "Volume up";
+        player.setVolume(std::min(1.0f, player.getVolume() + 0.05f));
+        break;
     case '-':
-        player.SetVolume(std::max(0.0f, player.GetVolume() - 0.1f));
-        return "Volume down";
+        player.setVolume(std::max(0.0f, player.getVolume() - 0.05f));
+        break;
     case 'f':
-    case 'F':
-        player.Seek(player.GetPosition() + 10);
-        return "Forward 10s";
+        player.seek(player.getPosition() + 10*1000);
+        break;
     case 'b':
-    case 'B':
-        player.Seek(std::max(0, player.GetPosition() - 10));
-        return "Back 10s";
+        player.seek(std::max(0, player.getPosition() - 10*1000));
+        break;
     case 'n':
-    case 'N':
         if (directory_mode && current_track_index < playlist.size() - 1)
         {
             current_track_index++;
-            player.Cleanup();
-            player.LoadFile(playlist[current_track_index]);
-            player.Play();
+            player.cleanup();
+            player.loadFile(playlist[current_track_index]);
+            player.play();
             std::cout << "\n";
-            return "Next track";
         }
-        return directory_mode ? "Last track" : "Next only in directory mode";
-    case '\n':
-        return "";
+        break;
     default:
-        return "";
+        break;
     }
+    return running;
 }
 
 bool CheckAutoAdvance(AudioPlayer &player,
@@ -153,23 +150,23 @@ bool CheckAutoAdvance(AudioPlayer &player,
                       bool directory_mode,
                       bool &was_playing)
 {
-    if (was_playing && !player.IsPlaying() && !player.IsPaused())
+    if (was_playing && !player.isPlaying() && !player.isPaused())
     {
         was_playing = false;
         if (directory_mode && current_track_index < playlist.size() - 1)
         {
             current_track_index++;
-            player.Cleanup();
-            if (player.LoadFile(playlist[current_track_index]))
+            player.cleanup();
+            if (player.loadFile(playlist[current_track_index]))
             {
-                player.Play();
+                player.play();
                 was_playing = true;
                 std::cout << "\n";
                 return true;
             }
         }
     }
-    else if (player.IsPlaying())
+    else if (player.isPlaying())
     {
         was_playing = true;
     }
@@ -219,7 +216,7 @@ std::vector<std::string> ScanDirectoryForAudio(const std::string &dir_path)
 }
 
 int main(int argc, char *argv[])
-{
+{ 
     // Parse command line arguments using cxxopts
     cxxopts::Options options("cli-player",
                              "CLI Audio Player - Play audio files from command line");
@@ -296,11 +293,12 @@ int main(int argc, char *argv[])
     AudioPlayer player;
 
     // Setup signal handlers
+    atexit(cleanup);
     signal(SIGINT, SignalHandler);
     signal(SIGTERM, SignalHandler);
 
     // Load first track
-    if (!player.LoadFile(playlist[current_track_index]))
+    if (!player.loadFile(playlist[current_track_index]))
     {
         return 1;
     }
@@ -311,11 +309,7 @@ int main(int argc, char *argv[])
     bool running = true;
     bool was_playing = false;
 
-    // Set stdin to non-blocking mode on Unix-like systems
-    #ifdef __unix__
-    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-    #endif
+    set_raw_mode(true);
 
     while (running && !signal_received)
     {
@@ -324,14 +318,9 @@ int main(int argc, char *argv[])
 
         // Check for input
         char ch;
-        if (read(STDIN_FILENO, &ch, 1) == 1)
+        if ((ch = quick_read()) != ERR)
         {
-            std::string msg = HandleCommand(ch, player, playlist, current_track_index,
-                                           directory_mode, running);
-            if (!msg.empty() && ch != '\n')
-            {
-                std::cout << "\n" << msg << std::endl;
-            }
+            running = HandleCommand(ch, player, playlist, current_track_index, directory_mode);
         }
 
         // Check for auto-advance
@@ -343,12 +332,9 @@ int main(int argc, char *argv[])
     }
 
     // Restore stdin to blocking mode
-    #ifdef __unix__
-    fcntl(STDIN_FILENO, F_SETFL, flags);
-    #endif
+    set_raw_mode(false);
 
-    player.Cleanup();
+    player.cleanup();
 
-    std::cout << "\n\nGoodbye!" << std::endl;
     return 0;
 }

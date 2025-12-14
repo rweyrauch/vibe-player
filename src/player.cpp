@@ -46,9 +46,6 @@ void AudioPlayer::DataCallback(ma_device* pDevice, void* pOutput, const void* pI
 }
 
 AudioPlayer::AudioPlayer()
-    : decoder_initialized_(false), device_initialized_(false),
-      playing_(false), paused_(false), volume_(1.0f),
-      duration_(0), paused_position_(0), paused_frame_(0)
 {
     memset(&decoder_, 0, sizeof(decoder_));
     memset(&device_, 0, sizeof(device_));
@@ -56,12 +53,12 @@ AudioPlayer::AudioPlayer()
 
 AudioPlayer::~AudioPlayer()
 {
-    Cleanup();
+    cleanup();
 }
 
-bool AudioPlayer::LoadFile(const std::string &filename)
+bool AudioPlayer::loadFile(const std::string &filename)
 {
-    Cleanup();
+    cleanup();
 
     // Initialize decoder
     ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
@@ -78,9 +75,9 @@ bool AudioPlayer::LoadFile(const std::string &filename)
     ma_uint64 lengthInFrames;
     result = ma_decoder_get_length_in_pcm_frames(&decoder_, &lengthInFrames);
     if (result == MA_SUCCESS) {
-        duration_ = static_cast<int>(lengthInFrames / decoder_.outputSampleRate);
+        duration_ms_ = static_cast<int>(lengthInFrames / decoder_.outputSampleRate) * 1000; // convert to milliseconds
     } else {
-        duration_ = 0;
+        duration_ms_ = 0;
     }
 
     // Initialize device
@@ -100,13 +97,13 @@ bool AudioPlayer::LoadFile(const std::string &filename)
     }
 
     device_initialized_ = true;
-    paused_position_ = 0;
-    paused_frame_ = 0;
+    paused_position_ = 0.0;
+    paused_frame_ = 0.0;
 
     return true;
 }
 
-void AudioPlayer::Play()
+void AudioPlayer::play()
 {
     if (!decoder_initialized_ || !device_initialized_) {
         std::cerr << "No audio file loaded" << std::endl;
@@ -117,7 +114,7 @@ void AudioPlayer::Play()
         // Resume from pause
         paused_ = false;
         playing_ = true;
-        start_time_ = std::chrono::steady_clock::now() - std::chrono::seconds(paused_position_);
+        start_time_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(paused_position_);
     } else if (!playing_) {
         // Start playback
         paused_position_ = 0;
@@ -135,19 +132,19 @@ void AudioPlayer::Play()
     }
 }
 
-void AudioPlayer::Pause()
+void AudioPlayer::pause()
 {
     if (playing_ && !paused_) {
         paused_ = true;
-        UpdatePosition();
-        paused_position_ = GetPosition();
+        updatePosition();
+        paused_position_ = getPosition();
 
         // Get current frame position
         ma_decoder_get_cursor_in_pcm_frames(&decoder_, &paused_frame_);
     }
 }
 
-void AudioPlayer::Stop()
+void AudioPlayer::stop()
 {
     if (playing_ || paused_) {
         if (device_initialized_) {
@@ -166,27 +163,27 @@ void AudioPlayer::Stop()
     }
 }
 
-bool AudioPlayer::IsPlaying() const
+bool AudioPlayer::isPlaying() const
 {
     return playing_ && !paused_ && device_initialized_ && ma_device_is_started(&device_);
 }
 
-bool AudioPlayer::IsPaused() const
+bool AudioPlayer::isPaused() const
 {
     return paused_;
 }
 
-void AudioPlayer::SetVolume(float vol)
+void AudioPlayer::setVolume(float vol)
 {
     volume_ = std::max(0.0f, std::min(1.0f, vol));
 }
 
-float AudioPlayer::GetVolume() const
+float AudioPlayer::getVolume() const
 {
     return volume_;
 }
 
-int AudioPlayer::GetPosition() const
+int AudioPlayer::getPosition() const
 {
     if (!playing_ && !paused_) {
         return paused_position_;
@@ -197,22 +194,22 @@ int AudioPlayer::GetPosition() const
     }
 
     auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time_).count();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_).count();
     return static_cast<int>(elapsed);
 }
 
-int AudioPlayer::GetDuration() const
+int AudioPlayer::getDuration() const
 {
-    return duration_;
+    return duration_ms_;
 }
 
-void AudioPlayer::Seek(int position)
+void AudioPlayer::seek(int position)
 {
     if (!decoder_initialized_) {
         return;
     }
 
-    ma_uint64 targetFrame = static_cast<ma_uint64>(position) * decoder_.outputSampleRate;
+    ma_uint64 targetFrame = static_cast<ma_uint64>(position/1000) * decoder_.outputSampleRate;
     ma_result result = ma_decoder_seek_to_pcm_frame(&decoder_, targetFrame);
 
     if (result == MA_SUCCESS) {
@@ -220,16 +217,16 @@ void AudioPlayer::Seek(int position)
         paused_frame_ = targetFrame;
 
         if (playing_ && !paused_) {
-            start_time_ = std::chrono::steady_clock::now() - std::chrono::seconds(position);
+            start_time_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(position);
         }
     } else {
         std::cerr << "Seek failed" << std::endl;
     }
 }
 
-void AudioPlayer::Cleanup()
+void AudioPlayer::cleanup()
 {
-    Stop();
+    stop();
 
     if (device_initialized_) {
         ma_device_uninit(&device_);
@@ -243,14 +240,14 @@ void AudioPlayer::Cleanup()
 
     paused_position_ = 0;
     paused_frame_ = 0;
-    duration_ = 0;
+    duration_ms_ = 0;
 }
 
-void AudioPlayer::UpdatePosition()
+void AudioPlayer::updatePosition()
 {
     if (playing_ && !paused_) {
         auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time_).count();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_).count();
         paused_position_ = static_cast<int>(elapsed);
     }
 }

@@ -21,11 +21,19 @@ FetchContent_Declare(
     GIT_TAG master
 )
 
-FetchContent_MakeAvailable(cxxopts miniaudio)
+# Fetch colors library
+FetchContent_Declare(
+    colors
+    GIT_REPOSITORY https://github.com/ShakaUVM/colors.git
+    GIT_TAG master
+)   
+
+FetchContent_MakeAvailable(cxxopts miniaudio colors)
 
 # Include directories
 include_directories(${miniaudio_SOURCE_DIR})
 include_directories(${miniaudio_SOURCE_DIR}/extras)
+include_directories(${colors_SOURCE_DIR})
 
 # Source files
 set(SOURCES
