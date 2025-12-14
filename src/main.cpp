@@ -13,7 +13,10 @@
 #include <thread>
 #include <vector>
 
-#include <ncurses.h>
+#ifdef __unix__
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include <cxxopts.hpp>
 
@@ -24,230 +27,59 @@ void SignalHandler(int signum)
     signal_received = signum;
 }
 
-void InitializeNcurses()
+void PrintHelp()
 {
-    initscr();            // Initialize screen
-    cbreak();             // Disable line buffering
-    noecho();             // Don't echo input
-    keypad(stdscr, TRUE); // Enable special keys
-    timeout(100);         // 100ms timeout for getch()
-    curs_set(0);          // Hide cursor
-
-    // Initialize color support if available
-    if (has_colors())
-    {
-        start_color();
-        use_default_colors();
-
-        // Status icon colors
-        init_pair(1, COLOR_GREEN, -1);
-        init_pair(2, COLOR_YELLOW, -1);
-        init_pair(3, COLOR_RED, -1);
-
-        // Frequency bar gradient: cyan → blue → magenta
-        init_pair(4, COLOR_CYAN, -1);
-        init_pair(5, COLOR_MAGENTA, -1);
-        init_pair(6, COLOR_BLUE, -1);
-
-        // Status message colors
-        init_pair(7, COLOR_GREEN, -1);
-        init_pair(8, COLOR_RED, -1);
-    }
+    std::cout << "\nCommands:\n"
+              << "  p - Play\n"
+              << "  s - Stop\n"
+              << "  u - Pause\n"
+              << "  r - Resume\n"
+              << "  + - Volume up\n"
+              << "  - - Volume down\n"
+              << "  f - Forward 10s\n"
+              << "  b - Back 10s\n"
+              << "  n - Next track (directory mode)\n"
+              << "  h - Help\n"
+              << "  q - Quit\n"
+              << std::endl;
 }
 
-void CleanupNcurses()
+void PrintStatus(AudioPlayer &player,
+                 const std::vector<std::string> &playlist,
+                 size_t current_track_index,
+                 bool directory_mode)
 {
-    echo();
-    nocbreak();
-    endwin();
-}
-
-void DrawProgressBar(int y, int x, int width, float progress)
-{
-    move(y, x);
-    addch('[');
-    int filled = (int)(width * progress);
-    for (int i = 0; i < width; i++)
-    {
-        addch(i < filled ? '=' : ' ');
-    }
-    addch(']');
-}
-
-void DrawBar(int y, int x, int width, float level, int color_pair = 0)
-{
-    move(y, x);
-
-    // Apply color if specified and colors are available
-    if (color_pair > 0 && has_colors())
-    {
-        attron(COLOR_PAIR(color_pair));
-    }
-
-    addch('[');
-    int filled = (int)(width * level);
-    for (int i = 0; i < width; i++)
-    {
-        addch(i < filled ? '#' : ' ');
-    }
-    addch(']');
-
-    // Turn off color attributes
-    if (color_pair > 0 && has_colors())
-    {
-        attroff(COLOR_PAIR(color_pair));
-    }
-}
-
-void DrawFrequencyBars(int y, AudioPlayer &player)
-{
-    float bass, mid, treble;
-    player.GetFrequencyLevels(bass, mid, treble);
-
-    mvprintw(y, 0, "Frequency: ");
-
-    // Draw bars with gradient colors
-    DrawBar(y, 11, 8, bass, 4);   // Cyan
-    DrawBar(y, 22, 8, mid, 6);    // Blue
-    DrawBar(y, 33, 8, treble, 5); // Magenta
-
-    // Color the labels to match their bars
-    if (has_colors())
-    {
-        attron(COLOR_PAIR(4));
-        mvprintw(y + 1, 11, "Bass");
-        attroff(COLOR_PAIR(4));
-
-        attron(COLOR_PAIR(6));
-        mvprintw(y + 1, 22, "Mid");
-        attroff(COLOR_PAIR(6));
-
-        attron(COLOR_PAIR(5));
-        mvprintw(y + 1, 33, "Treble");
-        attroff(COLOR_PAIR(5));
-    }
-    else
-    {
-        mvprintw(y + 1, 11, "Bass");
-        mvprintw(y + 1, 22, "Mid");
-        mvprintw(y + 1, 33, "Treble");
-    }
-}
-
-void DrawInterface(AudioPlayer &player,
-                   const std::vector<std::string> &playlist,
-                   size_t current_track_index,
-                   bool directory_mode,
-                   const std::string &status_message)
-{
-    clear();
-
     namespace fs = std::filesystem;
 
-    // Track info (lines 0-1)
-    mvprintw(0, 0, "Now Playing: %s",
-             fs::path(playlist[current_track_index]).filename().string().c_str());
-    if (directory_mode)
-    {
-        mvprintw(1, 0, "Track %zu of %zu",
-                 current_track_index + 1, playlist.size());
-    }
-
-    // Status bar (line 3)
     int pos = player.GetPosition();
     int dur = player.GetDuration();
     float vol = player.GetVolume();
 
-    // Determine playback state and icon
-    const char *icon;
-    int icon_color = 0;
-
-    bool is_playing = player.IsPlaying();
-    bool is_paused = player.IsPaused();
-
-    if (is_playing)
-    {
-        icon = ">";
-        icon_color = has_colors() ? 1 : 0; // Green
-    }
-    else if (is_paused)
-    {
-        icon = "||";
-        icon_color = has_colors() ? 2 : 0; // Yellow
-    }
+    std::string state;
+    if (player.IsPlaying())
+        state = "Playing";
+    else if (player.IsPaused())
+        state = "Paused";
     else
+        state = "Stopped";
+
+    std::cout << "\r[" << state << "] "
+              << fs::path(playlist[current_track_index]).filename().string()
+              << " | " << std::setfill('0') << std::setw(2) << (pos / 60) << ":"
+              << std::setw(2) << (pos % 60) << " / "
+              << std::setw(2) << (dur / 60) << ":"
+              << std::setw(2) << (dur % 60)
+              << " | Vol: " << std::setw(3) << (int)(vol * 100) << "%";
+
+    if (directory_mode)
     {
-        icon = "[]";
-        icon_color = has_colors() ? 3 : 0; // Red
+        std::cout << " | Track " << (current_track_index + 1) << "/" << playlist.size();
     }
 
-    // Print status bar with colored icon
-    mvprintw(3, 0, "[");
-    if (icon_color > 0)
-    {
-        attron(COLOR_PAIR(icon_color));
-        printw("%s", icon);
-        attroff(COLOR_PAIR(icon_color));
-    }
-    else
-    {
-        printw("%s", icon);
-    }
-    printw("] %02d:%02d / %02d:%02d | Volume: %d%% | ",
-           pos / 60, pos % 60, dur / 60, dur % 60, (int)(vol * 100));
-
-    // Progress bar
-    float progress = dur > 0 ? (float)pos / dur : 0.0f;
-    DrawProgressBar(3, 35, 20, progress);
-
-    // Frequency visualization (lines 5-6)
-    DrawFrequencyBars(5, player);
-
-    // Command help (lines 8-9)
-    mvprintw(8, 0, "Commands: (p)lay (s)top (u)pause (r)resume (+/-) vol");
-    mvprintw(9, 0, "          (f)orward (b)ack (n)ext (h)elp (q)uit");
-
-    // Status message (line 11)
-    int msg_color = 0;
-    if (has_colors())
-    {
-        // Success messages (green)
-        if (status_message.find("Playing") != std::string::npos ||
-            status_message.find("Resumed") != std::string::npos ||
-            status_message.find("Volume") != std::string::npos ||
-            status_message.find("Next track") != std::string::npos ||
-            status_message.find("Forward") != std::string::npos ||
-            status_message.find("Back") != std::string::npos)
-        {
-            msg_color = 7; // Green
-        }
-        // Warning/error messages (red)
-        else if (status_message.find("Unknown") != std::string::npos ||
-                 status_message.find("Last track") != std::string::npos ||
-                 status_message.find("only in directory mode") != std::string::npos ||
-                 status_message.find("Stopped") != std::string::npos ||
-                 status_message.find("Paused") != std::string::npos)
-        {
-            msg_color = 8; // Red
-        }
-    }
-
-    mvprintw(11, 0, "Status: ");
-    if (msg_color > 0)
-    {
-        attron(COLOR_PAIR(msg_color));
-        printw("%s", status_message.c_str());
-        attroff(COLOR_PAIR(msg_color));
-    }
-    else
-    {
-        printw("%s", status_message.c_str());
-    }
-
-    refresh();
+    std::cout << "          " << std::flush;
 }
 
-std::string HandleCommand(int ch,
+std::string HandleCommand(char ch,
                           AudioPlayer &player,
                           std::vector<std::string> &playlist,
                           size_t &current_track_index,
@@ -264,11 +96,12 @@ std::string HandleCommand(int ch,
         return "Quitting...";
     case 'h':
     case 'H':
-        return "Press keys for commands (no Enter needed)";
+        PrintHelp();
+        return "Help displayed";
     case 'p':
     case 'P':
         player.Play();
-        return "Playing...";
+        return "Playing";
     case 's':
     case 'S':
         player.Stop();
@@ -303,11 +136,14 @@ std::string HandleCommand(int ch,
             player.Cleanup();
             player.LoadFile(playlist[current_track_index]);
             player.Play();
+            std::cout << "\n";
             return "Next track";
         }
         return directory_mode ? "Last track" : "Next only in directory mode";
+    case '\n':
+        return "";
     default:
-        return "Unknown command (press h for help)";
+        return "";
     }
 }
 
@@ -328,6 +164,7 @@ bool CheckAutoAdvance(AudioPlayer &player,
             {
                 player.Play();
                 was_playing = true;
+                std::cout << "\n";
                 return true;
             }
         }
@@ -461,49 +298,57 @@ int main(int argc, char *argv[])
     // Setup signal handlers
     signal(SIGINT, SignalHandler);
     signal(SIGTERM, SignalHandler);
-    atexit(CleanupNcurses);
-
-    // Initialize ncurses
-    InitializeNcurses();
 
     // Load first track
     if (!player.LoadFile(playlist[current_track_index]))
     {
-        CleanupNcurses();
         return 1;
     }
+
+    std::cout << "\nCLI Audio Player - Press 'h' for help, 'p' to play\n" << std::endl;
 
     // Main event loop
     bool running = true;
     bool was_playing = false;
-    std::string status_message = "Press 'h' for help, 'p' to play";
+
+    // Set stdin to non-blocking mode on Unix-like systems
+    #ifdef __unix__
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    #endif
 
     while (running && !signal_received)
     {
-        // Draw interface
-        DrawInterface(player, playlist, current_track_index, directory_mode,
-                      status_message);
+        // Print status
+        PrintStatus(player, playlist, current_track_index, directory_mode);
 
-        // Get input (100ms timeout)
-        int ch = getch();
-
-        // Process command if key pressed
-        if (ch != ERR)
+        // Check for input
+        char ch;
+        if (read(STDIN_FILENO, &ch, 1) == 1)
         {
-            status_message = HandleCommand(ch, player, playlist, current_track_index,
+            std::string msg = HandleCommand(ch, player, playlist, current_track_index,
                                            directory_mode, running);
+            if (!msg.empty() && ch != '\n')
+            {
+                std::cout << "\n" << msg << std::endl;
+            }
         }
 
         // Check for auto-advance
         CheckAutoAdvance(player, playlist, current_track_index, directory_mode,
                          was_playing);
+
+        // Sleep briefly to avoid busy waiting
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    // Cleanup ncurses
-    CleanupNcurses();
+    // Restore stdin to blocking mode
+    #ifdef __unix__
+    fcntl(STDIN_FILENO, F_SETFL, flags);
+    #endif
 
     player.Cleanup();
 
-    std::cout << "\nGoodbye!" << std::endl;
+    std::cout << "\n\nGoodbye!" << std::endl;
     return 0;
 }

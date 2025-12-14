@@ -23,14 +23,9 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(cxxopts miniaudio)
 
-# Find ncurses
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(NCURSES REQUIRED ncurses)
-
 # Include directories
 include_directories(${miniaudio_SOURCE_DIR})
 include_directories(${miniaudio_SOURCE_DIR}/extras)
-include_directories(${NCURSES_INCLUDE_DIRS})
 
 # Source files
 set(SOURCES
@@ -47,7 +42,6 @@ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME}
-    ${NCURSES_LIBRARIES}
     cxxopts::cxxopts
     pthread
     m
@@ -61,8 +55,8 @@ install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 set(CPACK_GENERATOR "DEB")
 set(CPACK_PACKAGE_NAME "cli-player")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CLI Audio Player - Terminal-based audio player with ncurses interface")
-set(CPACK_PACKAGE_DESCRIPTION "A command-line audio player with ncurses interface supporting WAV, MP3, FLAC, and OGG formats. Features include playback controls, volume adjustment, seeking, directory playlist support, and real-time frequency visualization with colored ncurses display.")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CLI Audio Player - Terminal-based audio player")
+set(CPACK_PACKAGE_DESCRIPTION "A command-line audio player supporting WAV, MP3, FLAC, and OGG formats. Features include playback controls, volume adjustment, seeking, and directory playlist support.")
 set(CPACK_PACKAGE_CONTACT "Rick Weyrauch <rpweyrauch@gmail.com>")
 set(CPACK_PACKAGE_VENDOR "Rick Weyrauch")
 
@@ -70,7 +64,7 @@ set(CPACK_PACKAGE_VENDOR "Rick Weyrauch")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Rick Weyrauch <rpweyrauch@gmail.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libncurses6")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rpweyrauch/cli-player")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
