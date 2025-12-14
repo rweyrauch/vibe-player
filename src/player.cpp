@@ -175,7 +175,7 @@ bool AudioPlayer::isPaused() const
 
 void AudioPlayer::setVolume(float vol)
 {
-    volume_ = std::max(0.0f, std::min(1.0f, vol));
+    volume_ = std::clamp(vol, 0.0f, 1.0f);
 }
 
 float AudioPlayer::getVolume() const
@@ -183,7 +183,7 @@ float AudioPlayer::getVolume() const
     return volume_;
 }
 
-int AudioPlayer::getPosition() const
+int64_t AudioPlayer::getPosition() const
 {
     if (!playing_ && !paused_) {
         return paused_position_;
@@ -195,15 +195,15 @@ int AudioPlayer::getPosition() const
 
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_).count();
-    return static_cast<int>(elapsed);
+    return elapsed;
 }
 
-int AudioPlayer::getDuration() const
+int64_t AudioPlayer::getDuration() const
 {
     return duration_ms_;
 }
 
-void AudioPlayer::seek(int position)
+void AudioPlayer::seek(int64_t position)
 {
     if (!decoder_initialized_) {
         return;
@@ -248,6 +248,6 @@ void AudioPlayer::updatePosition()
     if (playing_ && !paused_) {
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_).count();
-        paused_position_ = static_cast<int>(elapsed);
+        paused_position_ = elapsed;
     }
 }

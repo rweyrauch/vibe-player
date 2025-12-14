@@ -20,9 +20,9 @@ public:
     bool isPaused() const;
     void setVolume(float volume); // 0.0 to 1.0
     float getVolume() const;
-    void seek(int position); // position in milliseconds
-    int getPosition() const; // position in milliseconds
-    int getDuration() const; // duration in milliseconds
+    void seek(int64_t position); // position in milliseconds
+    int64_t getPosition() const; // position in milliseconds
+    int64_t getDuration() const; // duration in milliseconds
     void cleanup();
 
 private:
@@ -32,10 +32,10 @@ private:
     bool device_initialized_ = false;
     bool playing_ = false;
     bool paused_ = false;
-    float volume_ = 0.5f; // volume level (0.0 to 1.0)
-    int duration_ms_ = 0; // duration in milliseconds
+    float volume_ = 0.25f; // volume level (0.0 to 1.0)
+    int64_t duration_ms_ = 0; // duration in milliseconds
     std::chrono::steady_clock::time_point start_time_;
-    int paused_position_ = 0; // position when paused, in milliseconds
+    int64_t paused_position_ = 0; // position when paused, in milliseconds
     ma_uint64 paused_frame_ = 0; // frame position when paused
 
     void updatePosition();
