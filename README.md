@@ -1,39 +1,36 @@
 # CLI Audio Player
 
-A command-line audio media player application built with CMake for Linux.
+A minimal, stripped-down command-line audio player for Linux with zero external dependencies (except those automatically fetched by CMake).
+
+## Philosophy
+
+This is a no-frills audio player designed for simplicity:
+- **Minimal dependencies**: Only C++ standard library plus header-only libraries fetched by CMake
+- **Simple interface**: Single-line status display with single-key commands
+- **Fast startup**: No complex UI, just load and play
+- **Portable**: Uses miniaudio for cross-platform audio playback
 
 ## Features
 
-- Play, pause, stop audio files
+- Play single audio files or entire directories
+- Auto-play on startup
+- Shuffle and repeat modes
+- Simple playback controls (play, pause, stop, seek)
 - Volume control
-- Seek forward/backward
-- Real-time playback status
-- Support for WAV, MP3, and FLAC audio files
+- Auto-advance to next track in directory mode
+- Real-time status display
+- Support for WAV, MP3, FLAC, and OGG audio formats
 
 ## Requirements
 
 - CMake 3.12 or higher
-- C++17 compatible compiler (g++, clang++)
-- SDL2 development libraries
-- SDL2_mixer development libraries
+- C++20 compatible compiler (g++, clang++)
+- Unix-like system (Linux, macOS, BSD)
 
-### Installing Dependencies
-
-On Ubuntu/Debian:
-```bash
-sudo apt-get update
-sudo apt-get install cmake build-essential libsdl2-dev libsdl2-mixer-dev
-```
-
-On Fedora/RHEL:
-```bash
-sudo dnf install cmake gcc-c++ SDL2-devel SDL2_mixer-devel
-```
-
-On Arch Linux:
-```bash
-sudo pacman -S cmake gcc sdl2 sdl2_mixer
-```
+**That's it!** No external libraries to install - CMake automatically fetches:
+- miniaudio (header-only audio library)
+- cxxopts (header-only command-line parser)
+- colors (header-only terminal control)
 
 ## Building
 
@@ -51,104 +48,109 @@ The executable will be created as `cli-player` in the `build` directory.
 ### Play a single audio file
 
 ```bash
-./cli-player <audio_file>
+./cli-player audio.mp3
 ```
+
+The player will load the file and start playing automatically.
 
 ### Play all audio files in a directory
 
 ```bash
-./cli-player -d <directory>
-./cli-player --directory <directory>
+./cli-player -d /path/to/music
 ```
 
-When playing a directory, the player will:
-- Scan for all supported audio files (WAV, MP3, FLAC, OGG)
-- Sort files alphabetically
-- Automatically advance to the next track when the current one finishes
-- Allow manual track navigation with the `next` command
+Options:
+- `-s, --shuffle`: Shuffle the playlist
+- `-r, --repeat`: Repeat the playlist when it ends
 
-### Commands
-
-Once the player is running, you can use the following commands:
-
-- `p` or `play` - Play audio
-- `s` or `stop` - Stop audio
-- `u` or `pause` - Pause audio
-- `r` or `resume` - Resume audio
-- `n` or `next` - Play next track (directory mode only)
-- `+` or `volup` - Increase volume by 10%
-- `-` or `voldown` - Decrease volume by 10%
-- `f` or `forward` - Forward 10 seconds
-- `b` or `backward` - Backward 10 seconds
-- `i` or `info` - Show track information
-- `h` or `help` - Show help message
-- `q` or `quit` - Quit player
-
-## Example
-
-### Single file mode
-
+Example:
 ```bash
-./cli-player music.mp3
-Now playing: music.mp3
-Type 'h' or 'help' for commands
-> p
-Playing...
-> +
-Volume: 80%
-> i
-Track Info:
-  File: music.mp3
-  Duration: 03:45
-  Position: 01:23
-  Volume: 80%
-  Status: Playing
-> q
-Goodbye!
+./cli-player -d ~/Music/Album --shuffle --repeat
 ```
 
-### Directory mode
+## Controls
 
-```bash
-./cli-player -d ~/Music/Album
-Found 12 audio file(s) in directory
-  1. 01-intro.mp3
-  2. 02-first-song.mp3
-  3. 03-second-song.mp3
-  ...
+Once running, use single-key commands (no need to press Enter):
 
-Now playing: 01-intro.mp3
-Track 1 of 12
-Type 'h' or 'help' for commands
-> p
-Playing...
-> n
+| Key | Action |
+|-----|--------|
+| `p` | Play |
+| `s` | Stop |
+| `u` | Pause |
+| `Space` | Toggle play/pause |
+| `+` | Volume up (5%) |
+| `-` | Volume down (5%) |
+| `f` or `→` | Forward 10 seconds |
+| `b` or `←` | Back 10 seconds |
+| `n` | Next track (directory mode) |
+| `h` | Show help |
+| `q` | Quit |
 
-Now playing: 02-first-song.mp3
-Track 2 of 12
-> i
-Track Info:
-  File: 02-first-song.mp3
-  Track: 2 of 12
-  Duration: 03:45
-  Position: 00:15
-  Volume: 70%
-  Status: Playing
-> q
-Goodbye!
+## Status Display
+
+The player shows a single updating status line:
+
 ```
+[Playing] song.mp3 | 01:23 / 03:45 | Vol: 70% | Track 3/12
+```
+
+- **State**: Playing, Paused, or Stopped
+- **Filename**: Current track name
+- **Position/Duration**: Current playback position and total duration
+- **Volume**: Current volume level (0-100%)
+- **Track**: Current track number (directory mode only)
 
 ## Supported Formats
 
-The player supports the following audio formats:
-- **WAV** - Uncompressed audio files
+The player supports the following audio formats via miniaudio:
+- **WAV** - Uncompressed audio
 - **MP3** - MPEG Audio Layer 3
 - **FLAC** - Free Lossless Audio Codec
-- **OGG** - Ogg Vorbis (if supported by SDL2_mixer)
+- **OGG** - Ogg Vorbis
 
-Note: Format support depends on SDL2_mixer's compiled codecs. Some distributions may require additional codec libraries for MP3 support.
+## Example Session
+
+```bash
+$ ./cli-player -d ~/Music/Favorites --shuffle
+Found 15 audio file(s) in directory
+  1. track-07.mp3
+  2. track-03.mp3
+  3. track-11.mp3
+  ...
+
+CLI Audio Player - Press 'h' for help, 'p' to play
+
+[Playing] track-07.mp3 | 00:15 / 03:42 | Vol: 25% | Track 1/15
+```
+
+Press `+` a few times to increase volume, `n` to skip to next track, `q` to quit.
+
+## Design Goals
+
+This player prioritizes:
+1. **Minimal dependencies**: Everything needed is fetched automatically by CMake
+2. **Fast startup**: No complex initialization or UI rendering
+3. **Simple codebase**: Easy to understand and modify
+4. **Reliable playback**: Uses proven miniaudio library for robust audio handling
+
+What this player is NOT:
+- Not a feature-rich player like mpg123 or VLC
+- Not a music library manager
+- Not a visualizer or analyzer
+- Not configurable (by design)
+
+## Technical Details
+
+- **Audio backend**: [miniaudio](https://github.com/mackron/miniaudio) (header-only, single-file audio library)
+- **Command parsing**: [cxxopts](https://github.com/jarro2783/cxxopts) (header-only)
+- **Terminal control**: [colors](https://github.com/ShakaUVM/colors) (header-only, for raw mode and input)
+- **Build system**: CMake with FetchContent
+- **Language**: C++20
 
 ## License
 
-This project is provided as-is for educational purposes.
+This project is provided as-is for educational and personal use.
 
+## Contributing
+
+This is intended to be a minimal reference implementation. If you want more features, consider forking or using a more full-featured player.
