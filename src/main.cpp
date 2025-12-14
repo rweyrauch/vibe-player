@@ -156,22 +156,31 @@ void DrawInterface(AudioPlayer &player,
     }
 
     // Status bar (line 3)
-    const char *icon = player.IsPlaying() ? ">" : player.IsPaused() ? "||"
-                                                                    : "[]";
     int pos = player.GetPosition();
     int dur = player.GetDuration();
     float vol = player.GetVolume();
 
-    // Determine icon color
+    // Determine playback state and icon
+    const char *icon;
     int icon_color = 0;
-    if (has_colors())
+
+    bool is_playing = player.IsPlaying();
+    bool is_paused = player.IsPaused();
+
+    if (is_playing)
     {
-        if (player.IsPlaying())
-            icon_color = 1; // Green
-        else if (player.IsPaused())
-            icon_color = 2; // Yellow
-        else
-            icon_color = 3; // Red
+        icon = ">";
+        icon_color = has_colors() ? 1 : 0; // Green
+    }
+    else if (is_paused)
+    {
+        icon = "||";
+        icon_color = has_colors() ? 2 : 0; // Yellow
+    }
+    else
+    {
+        icon = "[]";
+        icon_color = has_colors() ? 3 : 0; // Red
     }
 
     // Print status bar with colored icon

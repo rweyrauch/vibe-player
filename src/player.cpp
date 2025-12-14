@@ -56,9 +56,16 @@ bool AudioPlayer::LoadFile(const std::string &filename)
             return false;
         }
 
-        // SDL2_mixer doesn't provide a direct way to get duration
-        // We'll track it during playback
-        duration_ = 0;
+        // Get duration using Mix_MusicDuration (available in SDL_mixer 2.6+)
+        double duration_seconds = Mix_MusicDuration(music_);
+        if (duration_seconds > 0)
+        {
+            duration_ = static_cast<int>(duration_seconds);
+        }
+        else
+        {
+            duration_ = 0; // Unknown duration
+        }
     }
 
     paused_position_ = 0;
