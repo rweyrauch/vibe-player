@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -40,7 +41,6 @@ void PrintHelp()
               << "  p - Play\n"
               << "  s - Stop\n"
               << "  u - Pause\n"
-              << "  r - Resume\n"
               << "  + - Volume up\n"
               << "  - - Volume down\n"
               << "  f - Forward 10s\n"
@@ -98,8 +98,7 @@ bool HandleCommand(char ch,
     switch (cmd)
     {
     case 'q':
-        running = false;
-        std::cout << "\n";        
+        running = false;      
         break;
     case 'h':
         PrintHelp();
@@ -113,8 +112,15 @@ bool HandleCommand(char ch,
     case 'u':
         player.pause();
         break;
-    case 'r':
-        player.play();
+    case ' ':
+        if (player.isPlaying()) 
+        {
+            player.pause();
+        } 
+        else 
+        {
+            player.play();
+        }
         break;
     case '+':
         player.setVolume(std::min(1.0f, player.getVolume() + 0.05f));
@@ -123,10 +129,12 @@ bool HandleCommand(char ch,
         player.setVolume(std::max(0.0f, player.getVolume() - 0.05f));
         break;
     case 'f':
+    case RIGHT_ARROW:
         player.seek(player.getPosition() + 10*1000);
         break;
     case 'b':
-        player.seek(std::max(0, player.getPosition() - 10*1000));
+    case LEFT_ARROW:
+        player.seek(std::max(0LL, player.getPosition() - 10*1000LL));
         break;
     case 'n':
         if (directory_mode && current_track_index < playlist.size() - 1)
@@ -135,7 +143,6 @@ bool HandleCommand(char ch,
             player.cleanup();
             player.loadFile(playlist[current_track_index]);
             player.play();
-            std::cout << "\n";
         }
         break;
     default:
@@ -148,12 +155,18 @@ bool CheckAutoAdvance(AudioPlayer &player,
                       std::vector<std::string> &playlist,
                       size_t &current_track_index,
                       bool directory_mode,
+                      bool repeat,
                       bool &was_playing)
 {
     if (was_playing && !player.isPlaying() && !player.isPaused())
     {
         was_playing = false;
-        if (directory_mode && current_track_index < playlist.size() - 1)
+        if (repeat && directory_mode && (current_track_index == playlist.size() - 1))
+        {
+            current_track_index = 0;
+        }
+
+        if (directory_mode && (current_track_index < playlist.size() - 1))
         {
             current_track_index++;
             player.cleanup();
@@ -185,8 +198,7 @@ std::vector<std::string> ScanDirectoryForAudio(const std::string &dir_path)
     {
         if (!fs::exists(dir_path) || !fs::is_directory(dir_path))
         {
-            std::cerr << "Error: Directory does not exist: " << dir_path
-                      << std::endl;
+            std::cerr << "Error: Directory does not exist: " << dir_path << std::endl;
             return audio_files;
         }
 
@@ -223,6 +235,8 @@ int main(int argc, char *argv[])
 
     options.add_options()("d,directory", "Play all audio files in a directory", cxxopts::value<std::string>())
                          ("f,file", "Play a single audio file", cxxopts::value<std::string>())
+                         ("s,shuffle", "Shuffle playlist")
+                         ("r,repeat", "Repeat playlist")
                          ("h,help", "Print usage");
 
     options.parse_positional({"file"});
@@ -246,6 +260,9 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    const bool shuffle = result.count("shuffle") > 0;
+    const bool repeat = result.count("repeat") > 0;
+
     // Determine mode and input path
     bool directory_mode = false;
     std::string input_path;
@@ -261,19 +278,25 @@ int main(int argc, char *argv[])
 
         if (playlist.empty())
         {
-            std::cerr << "No audio files found in directory: " << input_path
-                      << std::endl;
+            std::cerr << "No audio files found in directory: " << input_path << std::endl;
             return 1;
         }
 
-        std::cout << "Found " << playlist.size() << " audio file(s) in directory"
-                  << std::endl;
+        if (shuffle)
+        {
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(playlist.begin(), playlist.end(), g);
+        }     
+
+        std::cout << "Found " << playlist.size() << " audio file(s) in directory" << std::endl;
         for (size_t i = 0; i < playlist.size(); ++i)
         {
             namespace fs = std::filesystem;
             std::cout << "  " << (i + 1) << ". "
                       << fs::path(playlist[i]).filename().string() << std::endl;
         }
+
     }
     else if (result.count("file"))
     {
@@ -284,8 +307,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cerr << "Error: Please specify an audio file or directory"
-                  << std::endl;
+        std::cerr << "Error: Please specify an audio file or directory" << std::endl;
         std::cout << options.help() << std::endl;
         return 1;
     }
@@ -311,6 +333,10 @@ int main(int argc, char *argv[])
 
     set_raw_mode(true);
 
+    // Start playing automatically
+    player.play();
+    was_playing = true;
+
     while (running && !signal_received)
     {
         // Print status
@@ -324,12 +350,12 @@ int main(int argc, char *argv[])
         }
 
         // Check for auto-advance
-        CheckAutoAdvance(player, playlist, current_track_index, directory_mode,
-                         was_playing);
+        CheckAutoAdvance(player, playlist, current_track_index, directory_mode, repeat, was_playing);
 
         // Sleep briefly to avoid busy waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    std::cout << std::endl;
 
     // Restore stdin to blocking mode
     set_raw_mode(false);
