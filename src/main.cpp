@@ -14,11 +14,6 @@
 #include <thread>
 #include <vector>
 
-#ifdef __unix__
-#include <fcntl.h>
-#include <unistd.h>
-#endif
-
 #include <cxxopts.hpp>
 #include <colors.h>
 
@@ -29,7 +24,7 @@ void SignalHandler(int signum)
     signal_received = signum;
 }
 
-void cleanup()
+void Cleanup()
 {
     set_mouse_mode(false);
     set_raw_mode(false);
@@ -315,7 +310,7 @@ int main(int argc, char *argv[])
     AudioPlayer player;
 
     // Setup signal handlers
-    atexit(cleanup);
+    atexit(Cleanup);
     signal(SIGINT, SignalHandler);
     signal(SIGTERM, SignalHandler);
 
