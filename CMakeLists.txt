@@ -26,23 +26,58 @@ FetchContent_Declare(
     colors
     GIT_REPOSITORY https://github.com/ShakaUVM/colors.git
     GIT_TAG master
-)   
+)
 
-FetchContent_MakeAvailable(cxxopts miniaudio colors)
+# Fetch nlohmann/json library
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+)
+
+# Fetch cpp-httplib library
+FetchContent_Declare(
+    httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG v0.15.3
+)
+
+# Fetch TagLib library
+FetchContent_Declare(
+    taglib
+    GIT_REPOSITORY https://github.com/taglib/taglib.git
+    GIT_TAG v2.0.2
+)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_BINDINGS OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib taglib)
 
 # Include directories
 include_directories(${miniaudio_SOURCE_DIR})
 include_directories(${miniaudio_SOURCE_DIR}/extras)
 include_directories(${colors_SOURCE_DIR})
+include_directories(${taglib_SOURCE_DIR}/taglib)
+include_directories(${taglib_SOURCE_DIR}/taglib/toolkit)
+include_directories(${taglib_SOURCE_DIR}/taglib/mpeg/id3v2)
+include_directories(${taglib_BINARY_DIR})
 
 # Source files
 set(SOURCES
     src/main.cpp
     src/player.cpp
+    src/metadata.cpp
+    src/metadata_cache.cpp
+    src/ai_playlist.cpp
 )
 
 set(HEADERS
     src/player.h
+    src/metadata.h
+    src/metadata_cache.h
+    src/ai_playlist.h
 )
 
 # Create executable
@@ -51,9 +86,14 @@ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 # Link libraries
 target_link_libraries(${PROJECT_NAME}
     cxxopts::cxxopts
+    nlohmann_json::nlohmann_json
+    httplib::httplib
+    tag
     pthread
     m
     dl
+    ssl
+    crypto
 )
 
 # Installation
@@ -72,7 +112,7 @@ set(CPACK_PACKAGE_VENDOR "Rick Weyrauch")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Rick Weyrauch <rpweyrauch@gmail.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libssl3 (>= 3.0)")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rpweyrauch/cli-player")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 

@@ -1,4 +1,7 @@
 #include "player.h"
+#include "metadata.h"
+#include "metadata_cache.h"
+#include "ai_playlist.h"
 
 #include <csignal>
 #include <cstring>
@@ -222,6 +225,33 @@ std::vector<std::string> ScanDirectoryForAudio(const std::string &dir_path)
     return audio_files;
 }
 
+std::vector<TrackMetadata> GetLibraryMetadata(
+    const std::string& library_path,
+    bool force_rescan = false)
+{
+    MetadataCache cache;
+
+    if (!force_rescan) {
+        auto cached = cache.load(library_path);
+        if (cached && cache.isValid(library_path, *cached)) {
+            std::cout << "Using cached metadata (" << cached->size()
+                     << " tracks)" << std::endl;
+            return *cached;
+        }
+    }
+
+    std::cout << "Scanning library and extracting metadata..." << std::endl;
+    auto metadata = MetadataExtractor::extractFromDirectory(library_path, true);
+
+    std::cout << "Extracted metadata for " << metadata.size() << " tracks" << std::endl;
+
+    if (!cache.save(library_path, metadata)) {
+        std::cerr << "Warning: Failed to save metadata cache" << std::endl;
+    }
+
+    return metadata;
+}
+
 int main(int argc, char *argv[])
 { 
     // Parse command line arguments using cxxopts
@@ -230,6 +260,9 @@ int main(int argc, char *argv[])
 
     options.add_options()("d,directory", "Play all audio files in a directory", cxxopts::value<std::string>())
                          ("f,file", "Play a single audio file", cxxopts::value<std::string>())
+                         ("l,library", "Music library path for AI playlist generation", cxxopts::value<std::string>())
+                         ("p,prompt", "Generate AI playlist from description", cxxopts::value<std::string>())
+                         ("force-scan", "Force rescan library metadata (ignore cache)")
                          ("s,shuffle", "Shuffle playlist")
                          ("r,repeat", "Repeat playlist")
                          ("h,help", "Print usage");
@@ -257,6 +290,7 @@ int main(int argc, char *argv[])
 
     const bool shuffle = result.count("shuffle") > 0;
     const bool repeat = result.count("repeat") > 0;
+    const bool force_scan = result.count("force-scan") > 0;
 
     // Determine mode and input path
     bool directory_mode = false;
@@ -264,7 +298,86 @@ int main(int argc, char *argv[])
     std::vector<std::string> playlist;
     size_t current_track_index = 0;
 
-    if (result.count("directory"))
+    // AI Playlist mode
+    if (result.count("prompt"))
+    {
+        if (!result.count("library"))
+        {
+            std::cerr << "Error: --library required with --prompt" << std::endl;
+            std::cout << options.help() << std::endl;
+            return 1;
+        }
+
+        // Check for API key
+        const char* api_key = std::getenv("ANTHROPIC_API_KEY");
+        if (!api_key || strlen(api_key) == 0)
+        {
+            std::cerr << "Error: ANTHROPIC_API_KEY environment variable not set" << std::endl;
+            std::cerr << "Set it with: export ANTHROPIC_API_KEY=your_key_here" << std::endl;
+            return 1;
+        }
+
+        std::string library_path = result["library"].as<std::string>();
+        std::string prompt_text = result["prompt"].as<std::string>();
+
+        // Get or generate metadata
+        auto library_metadata = GetLibraryMetadata(library_path, force_scan);
+
+        if (library_metadata.empty())
+        {
+            std::cerr << "Error: No audio files found in library" << std::endl;
+            return 1;
+        }
+
+        // Generate AI playlist
+        AIPlaylistGenerator generator(api_key);
+        auto track_indices = generator.generate(prompt_text, library_metadata);
+
+        if (!track_indices)
+        {
+            std::cerr << "Error: Failed to generate AI playlist" << std::endl;
+            return 1;
+        }
+
+        // Convert indices to file paths
+        for (const auto& idx_str : *track_indices)
+        {
+            size_t idx = std::stoull(idx_str);
+            if (idx < library_metadata.size())
+            {
+                playlist.push_back(library_metadata[idx].filepath);
+            }
+        }
+
+        if (playlist.empty())
+        {
+            std::cerr << "Error: AI generated empty playlist" << std::endl;
+            return 1;
+        }
+
+        // Apply shuffle if requested
+        if (shuffle)
+        {
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(playlist.begin(), playlist.end(), g);
+        }
+
+        // Set directory_mode = true for auto-advance
+        directory_mode = true;
+
+        std::cout << "\nGenerated AI playlist with " << playlist.size()
+                  << " tracks" << std::endl;
+
+        // Show selected tracks
+        for (size_t i = 0; i < playlist.size(); i++)
+        {
+            namespace fs = std::filesystem;
+            std::cout << "  " << (i + 1) << ". "
+                      << fs::path(playlist[i]).filename().string() << std::endl;
+        }
+    }
+    else if (result.count("directory"))
     {
         // Directory mode
         directory_mode = true;
@@ -302,7 +415,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cerr << "Error: Please specify an audio file or directory" << std::endl;
+        std::cerr << "Error: Please specify an audio file, directory, or AI prompt" << std::endl;
         std::cout << options.help() << std::endl;
         return 1;
     }
