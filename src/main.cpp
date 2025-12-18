@@ -161,6 +161,14 @@ bool CheckAutoAdvance(AudioPlayer &player,
     if (was_playing && !player.isPlaying() && !player.isPaused())
     {
         was_playing = false;
+
+        // Check if we've reached the end of the playlist
+        if (directory_mode && (current_track_index == playlist.size() - 1) && !repeat)
+        {
+            // End of playlist reached, signal to exit
+            return true;
+        }
+
         if (repeat && directory_mode && (current_track_index == playlist.size() - 1))
         {
             current_track_index = 0;
@@ -175,7 +183,7 @@ bool CheckAutoAdvance(AudioPlayer &player,
                 player.play();
                 was_playing = true;
                 std::cout << "\n";
-                return true;
+                return false;
             }
         }
     }
@@ -513,8 +521,12 @@ int main(int argc, char *argv[])
             running = HandleCommand(ch, player, playlist, current_track_index, directory_mode);
         }
 
-        // Check for auto-advance
-        CheckAutoAdvance(player, playlist, current_track_index, directory_mode, repeat, was_playing);
+        // Check for auto-advance and playlist end
+        if (CheckAutoAdvance(player, playlist, current_track_index, directory_mode, repeat, was_playing))
+        {
+            // Playlist has ended, exit
+            running = false;
+        }
 
         // Sleep briefly to avoid busy waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(100));

@@ -176,16 +176,19 @@ std::optional<TrackMetadata> MetadataExtractor::extract(const std::string& filep
         return std::nullopt;
     }
 
+    // Sanitize filepath early to ensure all derived strings are clean
+    std::string clean_filepath = sanitizeUtf8(filepath);
+
     TagLib::FileRef file(filepath.c_str());
 
     TrackMetadata metadata;
-    metadata.filepath = sanitizeUtf8(filepath);
-    metadata.filename = sanitizeUtf8(fs::path(filepath).filename().string());
+    metadata.filepath = clean_filepath;
+    metadata.filename = sanitizeUtf8(fs::path(clean_filepath).filename().string());
     metadata.file_mtime = getFileModificationTime(filepath);
 
     if (file.isNull()) {
         // File couldn't be opened, but use filename as fallback
-        metadata.title = sanitizeUtf8(fs::path(filepath).stem().string());
+        metadata.title = sanitizeUtf8(fs::path(clean_filepath).stem().string());
         metadata.duration_ms = 0;
         return metadata;
     }
@@ -221,7 +224,7 @@ std::optional<TrackMetadata> MetadataExtractor::extract(const std::string& filep
 
     // Fallback: if no title found, use filename
     if (!metadata.title) {
-        metadata.title = sanitizeUtf8(fs::path(filepath).stem().string());
+        metadata.title = sanitizeUtf8(fs::path(clean_filepath).stem().string());
     }
 
     // Get duration from audio properties
