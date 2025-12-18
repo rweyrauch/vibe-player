@@ -42,6 +42,13 @@ FetchContent_Declare(
     GIT_TAG v0.15.3
 )
 
+# Fetch spdlog library
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.13.0
+)
+
 # Fetch TagLib library
 FetchContent_Declare(
     taglib
@@ -70,7 +77,7 @@ set(LLAMA_NATIVE OFF CACHE BOOL "" FORCE)
 set(LLAMA_AVX2 ON CACHE BOOL "" FORCE)
 set(LLAMA_FMA ON CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib taglib llama)
+FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib spdlog taglib llama)
 
 # Include directories
 include_directories(${miniaudio_SOURCE_DIR})
@@ -110,6 +117,7 @@ target_link_libraries(${PROJECT_NAME}
     cxxopts::cxxopts
     nlohmann_json::nlohmann_json
     httplib::httplib
+    spdlog::spdlog
     tag
     llama
     pthread

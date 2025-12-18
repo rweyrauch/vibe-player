@@ -22,7 +22,8 @@ public:
     virtual std::optional<std::vector<std::string>> generate(
         const std::string& user_prompt,
         const std::vector<TrackMetadata>& library_metadata,
-        StreamCallback stream_callback = nullptr
+        StreamCallback stream_callback = nullptr,
+        bool verbose = false
     ) = 0;
 
     // Backend name for display/logging

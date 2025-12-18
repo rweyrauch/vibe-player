@@ -96,6 +96,9 @@ Get your API key from [console.anthropic.com](https://console.anthropic.com)
 ./cli-player --prompt "upbeat rock songs from the 90s" --library ~/Music
 ./cli-player --prompt "chill jazz for studying" --library ~/Music/Jazz
 ./cli-player --prompt "energetic workout music" --library ~/Music --shuffle
+
+# With verbose output to see the AI prompt
+./cli-player --prompt "relaxing ambient music" --library ~/Music --verbose
 ```
 
 **Features:**
@@ -137,6 +140,7 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 
 **Advanced options:**
 ```bash
+# Performance tuning
 ./cli-player \
     --prompt "upbeat electronic dance music" \
     --library ~/Music \
@@ -144,6 +148,14 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
     --ai-model=~/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf \
     --ai-threads=8 \
     --ai-context-size=4096
+
+# With verbose output for debugging
+./cli-player \
+    --prompt "relaxing piano music" \
+    --library ~/Music \
+    --ai-backend=llamacpp \
+    --ai-model=~/models/mistral-7b.gguf \
+    --verbose
 ```
 
 **Features:**
@@ -164,6 +176,7 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 | `--ai-threads` | CPU threads for llamacpp | `4` |
 | `--ai-context-size` | Context size for llamacpp | `2048` |
 | `--force-scan` | Force metadata rescan (ignore cache) | Off |
+| `--verbose` | Enable debug logging to file | Off |
 | `--shuffle` | Shuffle the generated playlist | Off |
 
 ### Example Prompts
@@ -236,6 +249,35 @@ export ANTHROPIC_API_KEY="your-key-here"
 - Be more specific in your prompt
 - For llamacpp: try a larger/better model (e.g., Mistral-7B instead of TinyLlama)
 - Check that your music library has proper metadata tags
+- Use `--verbose` to see the exact prompt being sent to the AI
+
+**Debugging with `--verbose`**
+
+The `--verbose` flag enables detailed logging to help debug issues:
+
+```bash
+./cli-player --prompt "upbeat rock" --library ~/Music --verbose
+```
+
+When verbose mode is enabled:
+- Debug information is written to `~/.cache/cli-player/cli-player.log`
+- Logs include:
+  - Complete AI prompts sent to backends
+  - Track sampling details
+  - API requests/responses (Claude backend)
+  - Model loading and inference info (llama.cpp backend)
+  - Error details and stack traces
+
+View the log file:
+```bash
+tail -f ~/.cache/cli-player/cli-player.log
+```
+
+The log file is useful for:
+- Understanding what metadata is sent to the AI
+- Debugging playlist generation issues
+- Tracking API errors or model loading problems
+- Sharing diagnostic info when reporting bugs
 
 ## Controls
 

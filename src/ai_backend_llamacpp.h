@@ -24,7 +24,8 @@ public:
     std::optional<std::vector<std::string>> generate(
         const std::string& user_prompt,
         const std::vector<TrackMetadata>& library_metadata,
-        StreamCallback stream_callback = nullptr
+        StreamCallback stream_callback = nullptr,
+        bool verbose = false
     ) override;
 
     std::string name() const override { return "llama.cpp"; }

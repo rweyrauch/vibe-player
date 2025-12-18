@@ -21,12 +21,46 @@
 
 #include <cxxopts.hpp>
 #include <colors.h>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 volatile sig_atomic_t signal_received = 0;
 
 void SignalHandler(int signum)
 {
     signal_received = signum;
+}
+
+void InitializeLogger(bool verbose)
+{
+    namespace fs = std::filesystem;
+
+    // Create log directory if it doesn't exist
+    std::string home = std::getenv("HOME") ? std::getenv("HOME") : ".";
+    fs::path log_dir = fs::path(home) / ".cache" / "cli-player";
+
+    try {
+        fs::create_directories(log_dir);
+
+        // Create file logger
+        auto log_path = log_dir / "cli-player.log";
+        auto logger = spdlog::basic_logger_mt("cli-player", log_path.string());
+        spdlog::set_default_logger(logger);
+
+        // Set log level based on verbose flag
+        if (verbose) {
+            spdlog::set_level(spdlog::level::debug);
+            spdlog::info("Verbose logging enabled");
+        } else {
+            spdlog::set_level(spdlog::level::info);
+        }
+
+        spdlog::info("CLI Audio Player started");
+        spdlog::info("Log file: {}", log_path.string());
+
+    } catch (const std::exception& e) {
+        std::cerr << "Warning: Failed to initialize logger: " << e.what() << std::endl;
+    }
 }
 
 void Cleanup()
@@ -281,6 +315,7 @@ int main(int argc, char *argv[])
                          ("ai-threads", "Number of threads for llama.cpp (default: 4)",
                              cxxopts::value<int>()->default_value("4"))
                          ("force-scan", "Force rescan library metadata (ignore cache)")
+                         ("verbose", "Display AI prompts and debug information")
                          ("s,shuffle", "Shuffle playlist")
                          ("r,repeat", "Repeat playlist")
                          ("h,help", "Print usage");
@@ -309,6 +344,10 @@ int main(int argc, char *argv[])
     const bool shuffle = result.count("shuffle") > 0;
     const bool repeat = result.count("repeat") > 0;
     const bool force_scan = result.count("force-scan") > 0;
+    const bool verbose = result.count("verbose") > 0;
+
+    // Initialize logger
+    InitializeLogger(verbose);
 
     // Determine mode and input path
     bool directory_mode = false;
@@ -395,7 +434,7 @@ int main(int argc, char *argv[])
         }
 
         // Generate playlist
-        auto track_indices = backend->generate(prompt_text, library_metadata, stream_cb);
+        auto track_indices = backend->generate(prompt_text, library_metadata, stream_cb, verbose);
 
         if (!track_indices)
         {

@@ -2,6 +2,7 @@
 #include "ai_prompt_builder.h"
 
 #include <llama.h>
+#include <spdlog/spdlog.h>
 #include <iostream>
 #include <filesystem>
 #include <cstring>
@@ -32,8 +33,12 @@ bool LlamaCppBackend::validate(std::string& error_message) const {
 
 bool LlamaCppBackend::initializeModel() {
     if (initialized_) {
+        spdlog::debug("Model already initialized");
         return true;
     }
+
+    spdlog::info("Initializing llama.cpp backend");
+    spdlog::debug("Loading model from: {}", model_path_);
 
     // Initialize llama backend
     llama_backend_init();
@@ -44,9 +49,12 @@ bool LlamaCppBackend::initializeModel() {
 
     model_ = llama_model_load_from_file(model_path_.c_str(), model_params);
     if (!model_) {
+        spdlog::error("Failed to load model from {}", model_path_);
         std::cerr << "Error: Failed to load model from " << model_path_ << std::endl;
         return false;
     }
+
+    spdlog::info("Model loaded successfully");
 
     // Create context
     llama_context_params ctx_params = llama_context_default_params();
@@ -54,14 +62,19 @@ bool LlamaCppBackend::initializeModel() {
     ctx_params.n_threads = config_.threads;
     ctx_params.n_threads_batch = config_.threads;
 
+    spdlog::debug("Creating llama context with {} context size, {} threads",
+                  config_.context_size, config_.threads);
+
     ctx_ = llama_init_from_model(model_, ctx_params);
     if (!ctx_) {
+        spdlog::error("Failed to create llama context");
         std::cerr << "Error: Failed to create llama context" << std::endl;
         llama_model_free(model_);
         model_ = nullptr;
         return false;
     }
 
+    spdlog::info("llama.cpp backend initialized successfully");
     initialized_ = true;
     return true;
 }
@@ -182,7 +195,8 @@ std::string LlamaCppBackend::generateText(const std::string& prompt, StreamCallb
 std::optional<std::vector<std::string>> LlamaCppBackend::generate(
     const std::string& user_prompt,
     const std::vector<TrackMetadata>& library_metadata,
-    StreamCallback stream_callback) {
+    StreamCallback stream_callback,
+    bool verbose) {
 
     if (library_metadata.empty()) {
         std::cerr << "Error: No tracks in library" << std::endl;
@@ -196,6 +210,13 @@ std::optional<std::vector<std::string>> LlamaCppBackend::generate(
     std::string prompt = AIPromptBuilder::buildPrompt(
         user_prompt, library_metadata, sampled_indices, config);
 
+    // Log debug information
+    spdlog::info("llama.cpp Backend: Generating playlist for prompt: '{}'", user_prompt);
+    spdlog::debug("Sampled {} tracks from {} total tracks", sampled_indices.size(), library_metadata.size());
+    spdlog::debug("AI Prompt:\n{}", prompt);
+    spdlog::debug("Using model: {}", model_path_);
+    spdlog::debug("Context size: {}, Threads: {}", config_.context_size, config_.threads);
+
     // Show progress message
     if (stream_callback) {
         std::cerr << "Generating playlist";
@@ -207,17 +228,22 @@ std::optional<std::vector<std::string>> LlamaCppBackend::generate(
     std::string response_text = generateText(prompt, stream_callback);
 
     if (response_text.empty()) {
+        spdlog::error("llama.cpp failed to generate response");
         std::cerr << "Error: Failed to generate response" << std::endl;
         return std::nullopt;
     }
+
+    spdlog::debug("llama.cpp response:\n{}", response_text);
 
     // Parse response
     auto playlist = AIPromptBuilder::parseJsonResponse(response_text, sampled_indices);
 
     if (playlist.empty()) {
+        spdlog::error("Generated empty playlist");
         std::cerr << "Error: Generated empty playlist" << std::endl;
         return std::nullopt;
     }
 
+    spdlog::info("Successfully generated playlist with {} tracks", playlist.size());
     return playlist;
 }
