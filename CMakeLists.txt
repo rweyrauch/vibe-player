@@ -53,7 +53,24 @@ set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_BINDINGS OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib taglib)
+# Fetch llama.cpp library
+FetchContent_Declare(
+    llama
+    GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
+    GIT_TAG master
+)
+
+# Configure llama.cpp build options
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+# Enable CPU optimizations but keep it portable
+set(LLAMA_NATIVE OFF CACHE BOOL "" FORCE)
+set(LLAMA_AVX2 ON CACHE BOOL "" FORCE)
+set(LLAMA_FMA ON CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib taglib llama)
 
 # Include directories
 include_directories(${miniaudio_SOURCE_DIR})
@@ -70,14 +87,19 @@ set(SOURCES
     src/player.cpp
     src/metadata.cpp
     src/metadata_cache.cpp
-    src/ai_playlist.cpp
+    src/ai_prompt_builder.cpp
+    src/ai_backend_claude.cpp
+    src/ai_backend_llamacpp.cpp
 )
 
 set(HEADERS
     src/player.h
     src/metadata.h
     src/metadata_cache.h
-    src/ai_playlist.h
+    src/ai_backend.h
+    src/ai_prompt_builder.h
+    src/ai_backend_claude.h
+    src/ai_backend_llamacpp.h
 )
 
 # Create executable
@@ -89,6 +111,7 @@ target_link_libraries(${PROJECT_NAME}
     nlohmann_json::nlohmann_json
     httplib::httplib
     tag
+    llama
     pthread
     m
     dl

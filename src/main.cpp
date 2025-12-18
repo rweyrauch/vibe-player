@@ -1,7 +1,9 @@
 #include "player.h"
 #include "metadata.h"
 #include "metadata_cache.h"
-#include "ai_playlist.h"
+#include "ai_backend.h"
+#include "ai_backend_claude.h"
+#include "ai_backend_llamacpp.h"
 
 #include <csignal>
 #include <cstring>
@@ -262,6 +264,14 @@ int main(int argc, char *argv[])
                          ("f,file", "Play a single audio file", cxxopts::value<std::string>())
                          ("l,library", "Music library path for AI playlist generation", cxxopts::value<std::string>())
                          ("p,prompt", "Generate AI playlist from description", cxxopts::value<std::string>())
+                         ("ai-backend", "AI backend: 'claude' or 'llamacpp' (default: claude)",
+                             cxxopts::value<std::string>()->default_value("claude"))
+                         ("ai-model", "Path to GGUF model file (required for llamacpp backend)",
+                             cxxopts::value<std::string>())
+                         ("ai-context-size", "Context size for llama.cpp (default: 2048)",
+                             cxxopts::value<int>()->default_value("2048"))
+                         ("ai-threads", "Number of threads for llama.cpp (default: 4)",
+                             cxxopts::value<int>()->default_value("4"))
                          ("force-scan", "Force rescan library metadata (ignore cache)")
                          ("s,shuffle", "Shuffle playlist")
                          ("r,repeat", "Repeat playlist")
@@ -308,17 +318,9 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        // Check for API key
-        const char* api_key = std::getenv("ANTHROPIC_API_KEY");
-        if (!api_key || strlen(api_key) == 0)
-        {
-            std::cerr << "Error: ANTHROPIC_API_KEY environment variable not set" << std::endl;
-            std::cerr << "Set it with: export ANTHROPIC_API_KEY=your_key_here" << std::endl;
-            return 1;
-        }
-
         std::string library_path = result["library"].as<std::string>();
         std::string prompt_text = result["prompt"].as<std::string>();
+        std::string backend_type = result["ai-backend"].as<std::string>();
 
         // Get or generate metadata
         auto library_metadata = GetLibraryMetadata(library_path, force_scan);
@@ -329,9 +331,63 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        // Generate AI playlist
-        AIPlaylistGenerator generator(api_key);
-        auto track_indices = generator.generate(prompt_text, library_metadata);
+        // Create backend based on flag
+        std::unique_ptr<AIBackend> backend;
+        StreamCallback stream_cb = nullptr;
+
+        if (backend_type == "claude") {
+            // Check for API key
+            const char* api_key = std::getenv("ANTHROPIC_API_KEY");
+            if (!api_key || strlen(api_key) == 0) {
+                std::cerr << "Error: ANTHROPIC_API_KEY environment variable not set" << std::endl;
+                std::cerr << "Set it with: export ANTHROPIC_API_KEY=your_key_here" << std::endl;
+                return 1;
+            }
+            backend = std::make_unique<ClaudeBackend>(api_key);
+
+        } else if (backend_type == "llamacpp") {
+            // Check for model path
+            if (!result.count("ai-model")) {
+                std::cerr << "Error: --ai-model required for llamacpp backend" << std::endl;
+                std::cerr << "Example: --ai-model=/path/to/model.gguf" << std::endl;
+                return 1;
+            }
+
+            std::string model_path = result["ai-model"].as<std::string>();
+            auto llamacpp_backend = std::make_unique<LlamaCppBackend>(model_path);
+
+            // Configure llama.cpp
+            LlamaConfig config;
+            config.context_size = result["ai-context-size"].as<int>();
+            config.threads = result["ai-threads"].as<int>();
+            llamacpp_backend->setConfig(config);
+
+            // Setup streaming callback for progress
+            stream_cb = [](const std::string& chunk, bool is_final) {
+                if (!is_final) {
+                    std::cerr << chunk << std::flush;
+                } else {
+                    std::cerr << "\n";
+                }
+            };
+
+            backend = std::move(llamacpp_backend);
+
+        } else {
+            std::cerr << "Error: Invalid AI backend '" << backend_type << "'" << std::endl;
+            std::cerr << "Valid options: 'claude' or 'llamacpp'" << std::endl;
+            return 1;
+        }
+
+        // Validate backend
+        std::string error_msg;
+        if (!backend->validate(error_msg)) {
+            std::cerr << "Error: " << error_msg << std::endl;
+            return 1;
+        }
+
+        // Generate playlist
+        auto track_indices = backend->generate(prompt_text, library_metadata, stream_cb);
 
         if (!track_indices)
         {

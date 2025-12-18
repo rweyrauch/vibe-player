@@ -20,6 +20,10 @@ This is a no-frills audio player designed for simplicity:
 - Auto-advance to next track in directory mode
 - Real-time status display
 - Support for WAV, MP3, FLAC, and OGG audio formats
+- **AI-powered playlist generation** from natural language descriptions
+  - Cloud-based (Claude API) or offline (llama.cpp)
+  - Smart sampling for large music libraries
+  - Metadata caching for fast subsequent runs
 
 ## Requirements
 
@@ -31,6 +35,10 @@ This is a no-frills audio player designed for simplicity:
 - miniaudio (header-only audio library)
 - cxxopts (header-only command-line parser)
 - colors (header-only terminal control)
+- TagLib (audio metadata extraction)
+- nlohmann/json (JSON parsing)
+- cpp-httplib (HTTP client for Claude API)
+- llama.cpp (optional: local LLM inference)
 
 ## Building
 
@@ -67,6 +75,167 @@ Example:
 ```bash
 ./cli-player -d ~/Music/Album --shuffle --repeat
 ```
+
+## AI Playlist Generation
+
+Generate playlists from natural language descriptions using AI. The player supports two backends:
+
+### Claude Backend (Cloud API)
+
+Uses Anthropic's Claude API for high-quality playlist curation. Requires an API key.
+
+**Setup:**
+```bash
+export ANTHROPIC_API_KEY="sk-ant-your-key-here"
+```
+
+Get your API key from [console.anthropic.com](https://console.anthropic.com)
+
+**Usage:**
+```bash
+./cli-player --prompt "upbeat rock songs from the 90s" --library ~/Music
+./cli-player --prompt "chill jazz for studying" --library ~/Music/Jazz
+./cli-player --prompt "energetic workout music" --library ~/Music --shuffle
+```
+
+**Features:**
+- High-quality curation
+- Fast response times
+- Handles large libraries (samples 1500 tracks)
+- Automatic metadata caching
+
+### llama.cpp Backend (Offline/Local)
+
+Uses local LLM inference for offline playlist generation. No API key required!
+
+**Setup:**
+
+1. Download a GGUF model (recommended models):
+
+| Model | Size | Quality | Speed | Download |
+|-------|------|---------|-------|----------|
+| TinyLlama-1.1B | ~600MB | Basic | Fast | [Link](https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF) |
+| Mistral-7B-Instruct | ~4GB | Good | Medium | [Link](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF) |
+| Llama-3-8B-Instruct | ~5GB | Best | Slower | [Link](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF) |
+
+Example download:
+```bash
+mkdir -p ~/models
+cd ~/models
+wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+```
+
+2. Run with the model:
+
+```bash
+./cli-player \
+    --prompt "relaxing ambient music" \
+    --library ~/Music \
+    --ai-backend=llamacpp \
+    --ai-model=~/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+```
+
+**Advanced options:**
+```bash
+./cli-player \
+    --prompt "upbeat electronic dance music" \
+    --library ~/Music \
+    --ai-backend=llamacpp \
+    --ai-model=~/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf \
+    --ai-threads=8 \
+    --ai-context-size=4096
+```
+
+**Features:**
+- Completely offline (no internet required)
+- Free to use
+- Privacy-preserving (data never leaves your machine)
+- Streaming progress display
+- Handles moderate libraries (samples 1000 tracks)
+
+### AI Playlist Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--prompt` | Natural language description | Required |
+| `--library` | Path to music library | Required |
+| `--ai-backend` | Backend: `claude` or `llamacpp` | `claude` |
+| `--ai-model` | Path to GGUF model (llamacpp only) | None |
+| `--ai-threads` | CPU threads for llamacpp | `4` |
+| `--ai-context-size` | Context size for llamacpp | `2048` |
+| `--force-scan` | Force metadata rescan (ignore cache) | Off |
+| `--shuffle` | Shuffle the generated playlist | Off |
+
+### Example Prompts
+
+```bash
+# Genre-based
+--prompt "heavy metal with fast guitar solos"
+--prompt "smooth jazz with saxophone"
+--prompt "classical piano concertos"
+
+# Mood-based
+--prompt "sad songs for rainy days"
+--prompt "uplifting songs to start the day"
+--prompt "intense focus music for coding"
+
+# Era/style-based
+--prompt "80s synth-pop classics"
+--prompt "90s grunge and alternative rock"
+--prompt "modern indie folk"
+
+# Activity-based
+--prompt "high-energy workout music"
+--prompt "relaxing music for meditation"
+--prompt "party songs to dance to"
+
+# Specific requests
+--prompt "songs similar to Pink Floyd"
+--prompt "instrumental music without vocals"
+--prompt "upbeat songs under 3 minutes"
+```
+
+### How It Works
+
+1. **Metadata Extraction**: Scans your library and extracts track metadata (title, artist, album, genre, year)
+2. **Caching**: Saves metadata to `~/.cache/cli-player/` for fast subsequent runs
+3. **Sampling**: For large libraries, randomly samples tracks to stay within AI token limits
+4. **AI Curation**: Sends prompt + track list to AI, receives playlist indices
+5. **Playback**: Loads selected tracks and starts playing with auto-advance
+
+### Comparison: Claude vs llama.cpp
+
+| Feature | Claude | llama.cpp |
+|---------|--------|-----------|
+| **Setup** | API key only | Download model (~1-5GB) |
+| **Cost** | Pay per request | Free |
+| **Speed** | Fast (2-5 seconds) | Slower (10-60 seconds) |
+| **Quality** | Excellent | Good to Very Good |
+| **Offline** | No | Yes |
+| **Privacy** | Data sent to API | Fully local |
+| **Library size** | Samples up to 1500 tracks | Samples up to 1000 tracks |
+
+### Troubleshooting
+
+**"ANTHROPIC_API_KEY not set"**
+```bash
+export ANTHROPIC_API_KEY="your-key-here"
+# Add to ~/.bashrc or ~/.zshrc to make permanent
+```
+
+**"Model file not found"**
+- Verify the model path is correct
+- Use absolute paths: `--ai-model=/home/user/models/model.gguf`
+
+**"Prompt too long" (llamacpp)**
+- Use a smaller library or subdirectory
+- Reduce context size: `--ai-context-size=2048`
+- The player automatically samples large libraries
+
+**Poor quality playlists**
+- Be more specific in your prompt
+- For llamacpp: try a larger/better model (e.g., Mistral-7B instead of TinyLlama)
+- Check that your music library has proper metadata tags
 
 ## Controls
 
@@ -144,8 +313,27 @@ What this player is NOT:
 - **Audio backend**: [miniaudio](https://github.com/mackron/miniaudio) (header-only, single-file audio library)
 - **Command parsing**: [cxxopts](https://github.com/jarro2783/cxxopts) (header-only)
 - **Terminal control**: [colors](https://github.com/ShakaUVM/colors) (header-only, for raw mode and input)
+- **Metadata extraction**: [TagLib](https://github.com/taglib/taglib) (audio file metadata)
+- **JSON parsing**: [nlohmann/json](https://github.com/nlohmann/json)
+- **HTTP client**: [cpp-httplib](https://github.com/yhirose/cpp-httplib) (for Claude API)
+- **Local LLM**: [llama.cpp](https://github.com/ggerganov/llama.cpp) (offline inference)
 - **Build system**: CMake with FetchContent
 - **Language**: C++20
+
+### Architecture
+
+The player uses a multi-backend architecture for AI playlist generation:
+
+```
+AIBackend (interface)
+    ├── ClaudeBackend - Cloud API using Anthropic's Claude
+    └── LlamaCppBackend - Local inference using llama.cpp
+
+AIPromptBuilder - Shared prompt generation and parsing logic
+MetadataCache - Persistent caching of track metadata
+```
+
+This design makes it easy to add new backends (OpenAI, Ollama, Groq, etc.) in the future.
 
 ## License
 
