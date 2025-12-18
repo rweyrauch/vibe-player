@@ -197,7 +197,7 @@ std::vector<std::string> ScanDirectoryForAudio(const std::string &dir_path)
             return audio_files;
         }
 
-        for (const auto &entry : fs::directory_iterator(dir_path))
+        for (const auto &entry : fs::recursive_directory_iterator(dir_path))
         {
             if (entry.is_regular_file())
             {
