@@ -86,12 +86,10 @@ void PrintHelp()
 }
 
 void PrintStatus(AudioPlayer &player,
-                 const std::vector<std::string> &playlist,
+                 const std::vector<TrackMetadata> &playlist,
                  size_t current_track_index,
                  bool directory_mode)
 {
-    namespace fs = std::filesystem;
-
     int pos = player.getPosition();
     int dur = player.getDuration();
     float vol = player.getVolume();
@@ -104,8 +102,24 @@ void PrintStatus(AudioPlayer &player,
     else
         state = "Stopped";
 
+    const TrackMetadata& track = playlist[current_track_index];
+
+    // Build display string: Artist - Album - Song
+    std::string display;
+    if (track.artist) {
+        display += *track.artist + " - ";
+    }
+    if (track.album) {
+        display += *track.album + " - ";
+    }
+    if (track.title) {
+        display += *track.title;
+    } else {
+        display += track.filename;
+    }
+
     std::cout << "\r[" << state << "] "
-              << fs::path(playlist[current_track_index]).filename().string()
+              << display
               << " | " << std::setfill('0') << std::setw(2) << (pos / 60000) << ":"
               << std::setw(2) << ((pos/1000) % 60) << " / "
               << std::setw(2) << ((dur/1000) / 60) << ":"
@@ -122,7 +136,7 @@ void PrintStatus(AudioPlayer &player,
 
 bool HandleCommand(char ch,
                           AudioPlayer &player,
-                          std::vector<std::string> &playlist,
+                          std::vector<TrackMetadata> &playlist,
                           size_t &current_track_index,
                           bool directory_mode)
 {
@@ -132,7 +146,7 @@ bool HandleCommand(char ch,
     switch (cmd)
     {
     case 'q':
-        running = false;      
+        running = false;
         break;
     case 'h':
         PrintHelp();
@@ -147,11 +161,11 @@ bool HandleCommand(char ch,
         player.pause();
         break;
     case ' ':
-        if (player.isPlaying()) 
+        if (player.isPlaying())
         {
             player.pause();
-        } 
-        else 
+        }
+        else
         {
             player.play();
         }
@@ -175,7 +189,7 @@ bool HandleCommand(char ch,
         {
             current_track_index++;
             player.cleanup();
-            player.loadFile(playlist[current_track_index]);
+            player.loadFile(playlist[current_track_index].filepath);
             player.play();
         }
         break;
@@ -186,7 +200,7 @@ bool HandleCommand(char ch,
 }
 
 bool CheckAutoAdvance(AudioPlayer &player,
-                      std::vector<std::string> &playlist,
+                      std::vector<TrackMetadata> &playlist,
                       size_t &current_track_index,
                       bool directory_mode,
                       bool repeat,
@@ -212,7 +226,7 @@ bool CheckAutoAdvance(AudioPlayer &player,
         {
             current_track_index++;
             player.cleanup();
-            if (player.loadFile(playlist[current_track_index]))
+            if (player.loadFile(playlist[current_track_index].filepath))
             {
                 player.play();
                 was_playing = true;
@@ -228,45 +242,10 @@ bool CheckAutoAdvance(AudioPlayer &player,
     return false;
 }
 
-std::vector<std::string> ScanDirectoryForAudio(const std::string &dir_path)
+std::vector<TrackMetadata> ScanDirectoryForAudio(const std::string &dir_path, bool verbose = false)
 {
-    std::vector<std::string> audio_files;
-    const std::vector<std::string> valid_extensions =
-        {".wav", ".mp3", ".flac", ".ogg"};
-
-    namespace fs = std::filesystem;
-
-    try
-    {
-        if (!fs::exists(dir_path) || !fs::is_directory(dir_path))
-        {
-            std::cerr << "Error: Directory does not exist: " << dir_path << std::endl;
-            return audio_files;
-        }
-
-        for (const auto &entry : fs::recursive_directory_iterator(dir_path))
-        {
-            if (entry.is_regular_file())
-            {
-                std::string ext = entry.path().extension().string();
-                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-                if (std::find(valid_extensions.begin(), valid_extensions.end(), ext) != valid_extensions.end())
-                {
-                    audio_files.push_back(entry.path().string());
-                }
-            }
-        }
-
-        // Sort files alphabetically
-        std::sort(audio_files.begin(), audio_files.end());
-    }
-    catch (const fs::filesystem_error &e)
-    {
-        std::cerr << "Error scanning directory: " << e.what() << std::endl;
-    }
-
-    return audio_files;
+    // Use the existing metadata extractor from the metadata module
+    return MetadataExtractor::extractFromDirectory(dir_path, true, verbose);
 }
 
 std::vector<TrackMetadata> GetLibraryMetadata(
@@ -353,7 +332,7 @@ int main(int argc, char *argv[])
     // Determine mode and input path
     bool directory_mode = false;
     std::string input_path;
-    std::vector<std::string> playlist;
+    std::vector<TrackMetadata> playlist;
     size_t current_track_index = 0;
 
     // AI Playlist mode
@@ -443,13 +422,13 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        // Convert indices to file paths
+        // Convert indices to track metadata
         for (const auto& idx_str : *track_indices)
         {
             size_t idx = std::stoull(idx_str);
             if (idx < library_metadata.size())
             {
-                playlist.push_back(library_metadata[idx].filepath);
+                playlist.push_back(library_metadata[idx]);
             }
         }
 
@@ -476,9 +455,17 @@ int main(int argc, char *argv[])
         // Show selected tracks
         for (size_t i = 0; i < playlist.size(); i++)
         {
-            namespace fs = std::filesystem;
-            std::cout << "  " << (i + 1) << ". "
-                      << fs::path(playlist[i]).filename().string() << std::endl;
+            const TrackMetadata& track = playlist[i];
+            std::cout << "  " << (i + 1) << ". ";
+            if (track.artist) {
+                std::cout << *track.artist << " - ";
+            }
+            if (track.title) {
+                std::cout << *track.title;
+            } else {
+                std::cout << track.filename;
+            }
+            std::cout << std::endl;
         }
     }
     else if (result.count("directory"))
@@ -486,7 +473,9 @@ int main(int argc, char *argv[])
         // Directory mode
         directory_mode = true;
         input_path = result["directory"].as<std::string>();
-        playlist = ScanDirectoryForAudio(input_path);
+
+        std::cout << "Scanning directory and extracting metadata..." << std::endl;
+        playlist = ScanDirectoryForAudio(input_path, verbose);
 
         if (playlist.empty())
         {
@@ -499,14 +488,22 @@ int main(int argc, char *argv[])
             std::random_device rd;
             std::mt19937 g(rd());
             std::shuffle(playlist.begin(), playlist.end(), g);
-        }     
+        }
 
         std::cout << "Found " << playlist.size() << " audio file(s) in directory" << std::endl;
         for (size_t i = 0; i < playlist.size(); ++i)
         {
-            namespace fs = std::filesystem;
-            std::cout << "  " << (i + 1) << ". "
-                      << fs::path(playlist[i]).filename().string() << std::endl;
+            const TrackMetadata& track = playlist[i];
+            std::cout << "  " << (i + 1) << ". ";
+            if (track.artist) {
+                std::cout << *track.artist << " - ";
+            }
+            if (track.title) {
+                std::cout << *track.title;
+            } else {
+                std::cout << track.filename;
+            }
+            std::cout << std::endl;
         }
 
     }
@@ -515,7 +512,15 @@ int main(int argc, char *argv[])
         // Single file mode
         directory_mode = false;
         input_path = result["file"].as<std::string>();
-        playlist.push_back(input_path);
+
+        // Extract metadata for the single file
+        auto metadata = MetadataExtractor::extract(input_path, verbose);
+        if (metadata) {
+            playlist.push_back(*metadata);
+        } else {
+            std::cerr << "Error: Failed to extract metadata from file: " << input_path << std::endl;
+            return 1;
+        }
     }
     else
     {
@@ -532,7 +537,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, SignalHandler);
 
     // Load first track
-    if (!player.loadFile(playlist[current_track_index]))
+    if (!player.loadFile(playlist[current_track_index].filepath))
     {
         return 1;
     }
