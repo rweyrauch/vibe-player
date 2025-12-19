@@ -271,7 +271,8 @@ std::vector<std::string> ScanDirectoryForAudio(const std::string &dir_path)
 
 std::vector<TrackMetadata> GetLibraryMetadata(
     const std::string& library_path,
-    bool force_rescan = false)
+    bool force_rescan = false,
+    bool verbose = false)
 {
     MetadataCache cache;
 
@@ -285,7 +286,7 @@ std::vector<TrackMetadata> GetLibraryMetadata(
     }
 
     std::cout << "Scanning library and extracting metadata..." << std::endl;
-    auto metadata = MetadataExtractor::extractFromDirectory(library_path, true);
+    auto metadata = MetadataExtractor::extractFromDirectory(library_path, true, verbose);
 
     std::cout << "Extracted metadata for " << metadata.size() << " tracks" << std::endl;
 
@@ -370,7 +371,7 @@ int main(int argc, char *argv[])
         std::string backend_type = result["ai-backend"].as<std::string>();
 
         // Get or generate metadata
-        auto library_metadata = GetLibraryMetadata(library_path, force_scan);
+        auto library_metadata = GetLibraryMetadata(library_path, force_scan, verbose);
 
         if (library_metadata.empty())
         {

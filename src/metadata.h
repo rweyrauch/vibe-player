@@ -27,12 +27,13 @@ struct TrackMetadata {
 class MetadataExtractor {
 public:
     // Extract metadata from a single audio file
-    static std::optional<TrackMetadata> extract(const std::string& filepath);
+    static std::optional<TrackMetadata> extract(const std::string& filepath, bool verbose = false);
 
     // Extract metadata from all files in a directory
     static std::vector<TrackMetadata> extractFromDirectory(
         const std::string& directory_path,
-        bool recursive = true
+        bool recursive = true,
+        bool verbose = false
     );
 
     // Get file modification time

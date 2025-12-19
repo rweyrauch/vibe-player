@@ -3,6 +3,7 @@
 #include <fileref.h>
 #include <tag.h>
 #include <tpropertymap.h>
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <filesystem>
@@ -168,7 +169,7 @@ std::optional<TrackMetadata> TrackMetadata::fromJson(const nlohmann::json& j) {
     }
 }
 
-std::optional<TrackMetadata> MetadataExtractor::extract(const std::string& filepath) {
+std::optional<TrackMetadata> MetadataExtractor::extract(const std::string& filepath, bool verbose) {
     namespace fs = std::filesystem;
 
     // Check if file exists
@@ -190,31 +191,36 @@ std::optional<TrackMetadata> MetadataExtractor::extract(const std::string& filep
         // File couldn't be opened, but use filename as fallback
         metadata.title = sanitizeUtf8(fs::path(clean_filepath).stem().string());
         metadata.duration_ms = 0;
-        return metadata;
+        return std::nullopt;
     }
 
     // Extract tags
     if (file.tag()) {
         TagLib::Tag* tag = file.tag();
 
-        auto titleStr = tag->title().toCString(true);
-        if (titleStr && strlen(titleStr) > 0) {
-            metadata.title = sanitizeUtf8(std::string(titleStr));
+        spdlog::info("Extracting metadata for file: {}", clean_filepath);
+
+        auto titleStr = tag->title().to8Bit();
+        if (!titleStr.empty()) {
+            spdlog::info("Title: {}", titleStr);
+            metadata.title = sanitizeUtf8(titleStr);
         }
 
-        auto artistStr = tag->artist().toCString(true);
-        if (artistStr && strlen(artistStr) > 0) {
-            metadata.artist = sanitizeUtf8(std::string(artistStr));
+        auto artistStr = tag->artist().to8Bit();
+        if (!artistStr.empty()) {
+            spdlog::info("Artist: {}", artistStr);
+            metadata.artist = sanitizeUtf8(artistStr);
         }
 
-        auto albumStr = tag->album().toCString(true);
-        if (albumStr && strlen(albumStr) > 0) {
-            metadata.album = sanitizeUtf8(std::string(albumStr));
+        auto albumStr = tag->album().to8Bit();
+        if (!albumStr.empty()) {
+            spdlog::info("Album: {}", albumStr);
+            metadata.album = sanitizeUtf8(albumStr);
         }
 
-        auto genreStr = tag->genre().toCString(true);
-        if (genreStr && strlen(genreStr) > 0) {
-            metadata.genre = sanitizeUtf8(std::string(genreStr));
+        auto genreStr = tag->genre().to8Bit();
+        if (!genreStr.empty()) {
+            metadata.genre = sanitizeUtf8(genreStr);
         }
 
         if (tag->year() > 0) {
@@ -239,7 +245,8 @@ std::optional<TrackMetadata> MetadataExtractor::extract(const std::string& filep
 
 std::vector<TrackMetadata> MetadataExtractor::extractFromDirectory(
     const std::string& directory_path,
-    bool recursive) {
+    bool recursive,
+    bool verbose) {
 
     std::vector<TrackMetadata> results;
     const std::vector<std::string> valid_extensions = {".wav", ".mp3", ".flac", ".ogg"};
@@ -261,7 +268,7 @@ std::vector<TrackMetadata> MetadataExtractor::extractFromDirectory(
                     if (std::find(valid_extensions.begin(), valid_extensions.end(), ext)
                         != valid_extensions.end()) {
 
-                        auto metadata = extract(entry.path().string());
+                        auto metadata = extract(entry.path().string(), verbose);
                         if (metadata) {
                             results.push_back(*metadata);
                         }

@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <random>
 
 using json = nlohmann::json;
 
@@ -33,7 +34,9 @@ std::string AIPromptBuilder::buildPrompt(
         // Randomly sample tracks if library is too large
         std::vector<size_t> all_indices(library_metadata.size());
         std::iota(all_indices.begin(), all_indices.end(), 0);
-        std::random_shuffle(all_indices.begin(), all_indices.end());
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle(all_indices.begin(), all_indices.end(), g);
         sampled_indices_out.assign(all_indices.begin(),
                                    all_indices.begin() + config.max_tracks_in_prompt);
         std::sort(sampled_indices_out.begin(), sampled_indices_out.end());
