@@ -5,6 +5,7 @@ A minimal, stripped-down command-line audio player for Linux with zero external 
 ## Philosophy
 
 This is a no-frills audio player designed for simplicity:
+
 - **Minimal dependencies**: Only C++ standard library plus header-only libraries fetched by CMake
 - **Simple interface**: Single-line status display with single-key commands
 - **Fast startup**: No complex UI, just load and play
@@ -32,6 +33,7 @@ This is a no-frills audio player designed for simplicity:
 - Unix-like system (Linux, macOS, BSD)
 
 **That's it!** No external libraries to install - CMake automatically fetches:
+
 - miniaudio (header-only audio library)
 - cxxopts (header-only command-line parser)
 - colors (header-only terminal control)
@@ -68,10 +70,12 @@ The player will load the file and start playing automatically.
 ```
 
 Options:
+
 - `-s, --shuffle`: Shuffle the playlist
 - `-r, --repeat`: Repeat the playlist when it ends
 
 Example:
+
 ```bash
 ./cli-player -d ~/Music/Album --shuffle --repeat
 ```
@@ -85,6 +89,7 @@ Generate playlists from natural language descriptions using AI. The player suppo
 Uses Anthropic's Claude API for high-quality playlist curation. Requires an API key.
 
 **Setup:**
+
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 ```
@@ -92,6 +97,7 @@ export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 Get your API key from [console.anthropic.com](https://console.anthropic.com)
 
 **Usage:**
+
 ```bash
 ./cli-player --prompt "upbeat rock songs from the 90s" --library ~/Music
 ./cli-player --prompt "chill jazz for studying" --library ~/Music/Jazz
@@ -102,6 +108,7 @@ Get your API key from [console.anthropic.com](https://console.anthropic.com)
 ```
 
 **Features:**
+
 - High-quality curation
 - Fast response times
 - Handles large libraries (samples 1500 tracks)
@@ -116,12 +123,13 @@ Uses local LLM inference for offline playlist generation. No API key required!
 1. Download a GGUF model (recommended models):
 
 | Model | Size | Quality | Speed | Download |
-|-------|------|---------|-------|----------|
+| ----- | ---- | ------- | ----- | -------- |
 | TinyLlama-1.1B | ~600MB | Basic | Fast | [Link](https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF) |
 | Mistral-7B-Instruct | ~4GB | Good | Medium | [Link](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF) |
 | Llama-3-8B-Instruct | ~5GB | Best | Slower | [Link](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF) |
 
 Example download:
+
 ```bash
 mkdir -p ~/models
 cd ~/models
@@ -139,6 +147,7 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 ```
 
 **Advanced options:**
+
 ```bash
 # Performance tuning
 ./cli-player \
@@ -159,6 +168,7 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 ```
 
 **Features:**
+
 - Completely offline (no internet required)
 - Free to use
 - Privacy-preserving (data never leaves your machine)
@@ -168,7 +178,7 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 ### AI Playlist Options
 
 | Flag | Description | Default |
-|------|-------------|---------|
+| ---- | ----------- | ------- |
 | `--prompt` | Natural language description | Required |
 | `--library` | Path to music library | Required |
 | `--ai-backend` | Backend: `claude` or `llamacpp` | `claude` |
@@ -219,7 +229,7 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 ### Comparison: Claude vs llama.cpp
 
 | Feature | Claude | llama.cpp |
-|---------|--------|-----------|
+| ------- | ------ | --------- |
 | **Setup** | API key only | Download model (~1-5GB) |
 | **Cost** | Pay per request | Free |
 | **Speed** | Fast (2-5 seconds) | Slower (10-60 seconds) |
@@ -231,21 +241,25 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 ### Troubleshooting
 
 **"ANTHROPIC_API_KEY not set"**
+
 ```bash
 export ANTHROPIC_API_KEY="your-key-here"
 # Add to ~/.bashrc or ~/.zshrc to make permanent
 ```
 
 **"Model file not found"**
+
 - Verify the model path is correct
 - Use absolute paths: `--ai-model=/home/user/models/model.gguf`
 
 **"Prompt too long" (llamacpp)**
+
 - Use a smaller library or subdirectory
 - Reduce context size: `--ai-context-size=2048`
 - The player automatically samples large libraries
 
 **Poor quality playlists**
+
 - Be more specific in your prompt
 - For llamacpp: try a larger/better model (e.g., Mistral-7B instead of TinyLlama)
 - Check that your music library has proper metadata tags
@@ -260,6 +274,7 @@ The `--verbose` flag enables detailed logging to help debug issues:
 ```
 
 When verbose mode is enabled:
+
 - Debug information is written to `~/.cache/cli-player/cli-player.log`
 - Logs include:
   - Complete AI prompts sent to backends
@@ -269,11 +284,13 @@ When verbose mode is enabled:
   - Error details and stack traces
 
 View the log file:
+
 ```bash
 tail -f ~/.cache/cli-player/cli-player.log
 ```
 
 The log file is useful for:
+
 - Understanding what metadata is sent to the AI
 - Debugging playlist generation issues
 - Tracking API errors or model loading problems
@@ -284,7 +301,7 @@ The log file is useful for:
 Once running, use single-key commands (no need to press Enter):
 
 | Key | Action |
-|-----|--------|
+| --- | ------ |
 | `p` | Play |
 | `s` | Stop |
 | `u` | Pause |
@@ -314,6 +331,7 @@ The player shows a single updating status line:
 ## Supported Formats
 
 The player supports the following audio formats via miniaudio:
+
 - **WAV** - Uncompressed audio
 - **MP3** - MPEG Audio Layer 3
 - **FLAC** - Free Lossless Audio Codec
@@ -339,12 +357,14 @@ Press `+` a few times to increase volume, `n` to skip to next track, `q` to quit
 ## Design Goals
 
 This player prioritizes:
+
 1. **Minimal dependencies**: Everything needed is fetched automatically by CMake
 2. **Fast startup**: No complex initialization or UI rendering
 3. **Simple codebase**: Easy to understand and modify
 4. **Reliable playback**: Uses proven miniaudio library for robust audio handling
 
 What this player is NOT:
+
 - Not a feature-rich player like mpg123 or VLC
 - Not a music library manager
 - Not a visualizer or analyzer
