@@ -258,16 +258,16 @@ std::vector<TrackMetadata> GetLibraryMetadata(
     if (!force_rescan) {
         auto cached = cache.load(library_path);
         if (cached && cache.isValid(library_path, *cached)) {
-            std::cout << "Using cached metadata (" << cached->size()
+            std::cerr << "Using cached metadata (" << cached->size()
                      << " tracks)" << std::endl;
             return *cached;
         }
     }
 
-    std::cout << "Scanning library and extracting metadata..." << std::endl;
+    std::cerr << "Scanning library and extracting metadata..." << std::endl;
     auto metadata = MetadataExtractor::extractFromDirectory(library_path, true, verbose);
 
-    std::cout << "Extracted metadata for " << metadata.size() << " tracks" << std::endl;
+    std::cerr << "Extracted metadata for " << metadata.size() << " tracks" << std::endl;
 
     if (!cache.save(library_path, metadata)) {
         std::cerr << "Warning: Failed to save metadata cache" << std::endl;
@@ -464,7 +464,7 @@ int main(int argc, char *argv[])
         // Set directory_mode = true for auto-advance
         directory_mode = true;
 
-        std::cout << "\nGenerated AI playlist with " << playlist.size()
+        std::cerr << "\nGenerated AI playlist with " << playlist.size()
                   << " tracks" << std::endl;
 
         // Show selected tracks
@@ -489,7 +489,7 @@ int main(int argc, char *argv[])
         directory_mode = true;
         input_path = result["directory"].as<std::string>();
 
-        std::cout << "Scanning directory and extracting metadata..." << std::endl;
+        std::err << "Scanning directory and extracting metadata..." << std::endl;
         playlist = ScanDirectoryForAudio(input_path, verbose);
 
         if (playlist.empty())
@@ -505,7 +505,7 @@ int main(int argc, char *argv[])
             std::shuffle(playlist.begin(), playlist.end(), g);
         }
 
-        std::cout << "Found " << playlist.size() << " audio file(s) in directory" << std::endl;
+        std::cerr << "Found " << playlist.size() << " audio file(s) in directory" << std::endl;
         for (size_t i = 0; i < playlist.size(); ++i)
         {
             const TrackMetadata& track = playlist[i];

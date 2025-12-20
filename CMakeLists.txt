@@ -88,34 +88,31 @@ include_directories(${taglib_SOURCE_DIR}/taglib/toolkit)
 include_directories(${taglib_SOURCE_DIR}/taglib/mpeg/id3v2)
 include_directories(${taglib_BINARY_DIR})
 
-# Source files
-set(SOURCES
-    src/main.cpp
+# Common library (shared code)
+add_library(cli-player-common STATIC
     src/player.cpp
     src/metadata.cpp
     src/metadata_cache.cpp
+    src/playlist.cpp
+)
+
+target_link_libraries(cli-player-common
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    tag
+)
+
+# Playlist generator executable
+add_executable(cli-playlist
+    src/main_playlist_gen.cpp
     src/ai_prompt_builder.cpp
     src/ai_backend_claude.cpp
     src/ai_backend_llamacpp.cpp
     src/library_search.cpp
 )
 
-set(HEADERS
-    src/player.h
-    src/metadata.h
-    src/metadata_cache.h
-    src/ai_backend.h
-    src/ai_prompt_builder.h
-    src/ai_backend_claude.h
-    src/ai_backend_llamacpp.h
-    src/library_search.h
-)
-
-# Create executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
-
-# Link libraries
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(cli-playlist
+    cli-player-common
     cxxopts::cxxopts
     nlohmann_json::nlohmann_json
     httplib::httplib
@@ -129,8 +126,23 @@ target_link_libraries(${PROJECT_NAME}
     crypto
 )
 
+# Player executable
+add_executable(cli-player
+    src/main_player.cpp
+)
+
+target_link_libraries(cli-player
+    cli-player-common
+    cxxopts::cxxopts
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    tag
+    pthread
+    m
+)
+
 # Installation
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(TARGETS cli-player cli-playlist DESTINATION bin)
 
 # CPack configuration for creating .deb packages
 set(CPACK_GENERATOR "DEB")

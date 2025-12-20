@@ -325,7 +325,7 @@ std::optional<std::vector<std::string>> ClaudeBackend::generate(
         {"content", initial_prompt.str()}
     });
 
-    std::cout << "Generating AI playlist using tool search..." << std::endl;
+    spdlog::debug("Generating AI playlist using tool search...");
 
     // Tool use loop
     const int MAX_TURNS = 10;
@@ -385,7 +385,6 @@ std::optional<std::vector<std::string>> ClaudeBackend::generate(
         // Handle tool use
         if (stop_reason == "tool_use") {
             spdlog::info("Claude is using tools to search the library...");
-            std::cout << "Searching library..." << std::endl;
 
             // Process all tool use requests
             json::array_t tool_results;
