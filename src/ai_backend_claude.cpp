@@ -7,11 +7,45 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <algorithm>
 
 using json = nlohmann::json;
 
-ClaudeBackend::ClaudeBackend(const std::string& api_key)
-    : api_key_(api_key) {
+ClaudeBackend::ClaudeBackend(const std::string& api_key, ClaudeModel model)
+    : api_key_(api_key), model_(getModelId(model)) {
+}
+
+ClaudeBackend::ClaudeBackend(const std::string& api_key, const std::string& model_id)
+    : api_key_(api_key), model_(model_id) {
+}
+
+std::string ClaudeBackend::getModelId(ClaudeModel model) {
+    switch (model) {
+        case ClaudeModel::FAST:
+            return "claude-3-5-haiku-20241022";
+        case ClaudeModel::BALANCED:
+            return "claude-3-5-sonnet-20240620";  // Using June 2024 version for wider availability
+        case ClaudeModel::BEST:
+            return "claude-sonnet-4-5-20250929";  // Latest Claude Sonnet 4.5
+        default:
+            return "claude-3-5-haiku-20241022";
+    }
+}
+
+ClaudeModel ClaudeBackend::parseModelPreset(const std::string& preset) {
+    std::string lower = preset;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    if (lower == "fast" || lower == "haiku") {
+        return ClaudeModel::FAST;
+    } else if (lower == "balanced" || lower == "sonnet") {
+        return ClaudeModel::BALANCED;
+    } else if (lower == "best" || lower == "opus") {
+        return ClaudeModel::BEST;
+    }
+
+    // Default to fast
+    return ClaudeModel::FAST;
 }
 
 bool ClaudeBackend::validate(std::string& error_message) const {
@@ -52,7 +86,7 @@ std::optional<std::vector<std::string>> ClaudeBackend::generate(
 
     // Build request body
     json request_body = {
-        {"model", DEFAULT_MODEL},
+        {"model", model_},
         {"max_tokens", 1024},
         {"messages", json::array({
             {

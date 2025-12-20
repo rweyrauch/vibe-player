@@ -288,6 +288,8 @@ int main(int argc, char *argv[])
                          ("p,prompt", "Generate AI playlist from description", cxxopts::value<std::string>())
                          ("ai-backend", "AI backend: 'claude' or 'llamacpp' (default: claude)",
                              cxxopts::value<std::string>()->default_value("claude"))
+                         ("claude-model", "Claude model preset: 'fast' (Haiku), 'balanced' (Sonnet), 'best' (Opus) or full model ID (default: fast)",
+                             cxxopts::value<std::string>()->default_value("fast"))
                          ("ai-model", "Path to GGUF model file (required for llamacpp backend)",
                              cxxopts::value<std::string>())
                          ("ai-context-size", "Context size for llama.cpp (default: 2048)",
@@ -370,7 +372,20 @@ int main(int argc, char *argv[])
                 std::cerr << "Set it with: export ANTHROPIC_API_KEY=your_key_here" << std::endl;
                 return 1;
             }
-            backend = std::make_unique<ClaudeBackend>(api_key);
+
+            // Get model selection
+            std::string model_selection = result["claude-model"].as<std::string>();
+
+            // Check if it's a preset or a full model ID
+            if (model_selection == "fast" || model_selection == "balanced" ||
+                model_selection == "best" || model_selection == "haiku" ||
+                model_selection == "sonnet" || model_selection == "opus") {
+                ClaudeModel model = ClaudeBackend::parseModelPreset(model_selection);
+                backend = std::make_unique<ClaudeBackend>(api_key, model);
+            } else {
+                // Use as full model ID
+                backend = std::make_unique<ClaudeBackend>(api_key, model_selection);
+            }
 
         } else if (backend_type == "llamacpp") {
             // Check for model path
