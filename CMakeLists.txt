@@ -26,38 +26,123 @@ FetchContent_Declare(
     colors
     GIT_REPOSITORY https://github.com/ShakaUVM/colors.git
     GIT_TAG master
-)   
+)
 
-FetchContent_MakeAvailable(cxxopts miniaudio colors)
+# Fetch nlohmann/json library
+FetchContent_Declare(
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+)
+
+# Fetch cpp-httplib library
+FetchContent_Declare(
+    httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG v0.15.3
+)
+
+# Fetch spdlog library
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.13.0
+)
+
+# Fetch TagLib library
+FetchContent_Declare(
+    taglib
+    GIT_REPOSITORY https://github.com/taglib/taglib.git
+    GIT_TAG v2.0.2
+)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_BINDINGS OFF CACHE BOOL "" FORCE)
+
+# Fetch llama.cpp library
+FetchContent_Declare(
+    llama
+    GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
+    GIT_TAG master
+)
+
+# Configure llama.cpp build options
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+# Enable CPU optimizations but keep it portable
+set(LLAMA_NATIVE OFF CACHE BOOL "" FORCE)
+set(LLAMA_AVX2 ON CACHE BOOL "" FORCE)
+set(LLAMA_FMA ON CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib spdlog taglib llama)
 
 # Include directories
 include_directories(${miniaudio_SOURCE_DIR})
 include_directories(${miniaudio_SOURCE_DIR}/extras)
 include_directories(${colors_SOURCE_DIR})
+include_directories(${taglib_SOURCE_DIR}/taglib)
+include_directories(${taglib_SOURCE_DIR}/taglib/toolkit)
+include_directories(${taglib_SOURCE_DIR}/taglib/mpeg/id3v2)
+include_directories(${taglib_BINARY_DIR})
 
-# Source files
-set(SOURCES
-    src/main.cpp
+# Common library (shared code)
+add_library(cli-player-common STATIC
     src/player.cpp
+    src/metadata.cpp
+    src/metadata_cache.cpp
+    src/playlist.cpp
 )
 
-set(HEADERS
-    src/player.h
+target_link_libraries(cli-player-common
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    tag
 )
 
-# Create executable
-add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+# Playlist generator executable
+add_executable(cli-playlist
+    src/main_playlist_gen.cpp
+    src/ai_prompt_builder.cpp
+    src/ai_backend_claude.cpp
+    src/ai_backend_llamacpp.cpp
+    src/library_search.cpp
+)
 
-# Link libraries
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(cli-playlist
+    cli-player-common
     cxxopts::cxxopts
+    nlohmann_json::nlohmann_json
+    httplib::httplib
+    spdlog::spdlog
+    tag
+    llama
     pthread
     m
     dl
+    ssl
+    crypto
+)
+
+# Player executable
+add_executable(cli-player
+    src/main_player.cpp
+)
+
+target_link_libraries(cli-player
+    cli-player-common
+    cxxopts::cxxopts
+    nlohmann_json::nlohmann_json
+    spdlog::spdlog
+    tag
+    pthread
+    m
 )
 
 # Installation
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(TARGETS cli-player cli-playlist DESTINATION bin)
 
 # CPack configuration for creating .deb packages
 set(CPACK_GENERATOR "DEB")
@@ -72,7 +157,7 @@ set(CPACK_PACKAGE_VENDOR "Rick Weyrauch")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Rick Weyrauch <rpweyrauch@gmail.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libssl3 (>= 3.0)")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rpweyrauch/cli-player")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
