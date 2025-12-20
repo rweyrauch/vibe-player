@@ -2,7 +2,9 @@
 #define AI_BACKEND_CLAUDE_H
 
 #include "ai_backend.h"
+#include "library_search.h"
 #include <string>
+#include <nlohmann/json.hpp>
 
 // Model presets for easy selection
 enum class ClaudeModel {
@@ -37,6 +39,14 @@ private:
     std::string model_;
     static constexpr const char* API_ENDPOINT = "api.anthropic.com";
     static constexpr const char* API_VERSION = "2023-06-01";
+
+    // Tool use support
+    nlohmann::json buildToolDefinitions() const;
+    nlohmann::json executeToolCall(
+        const std::string& tool_name,
+        const nlohmann::json& tool_input,
+        const LibrarySearch& search_engine
+    ) const;
 };
 
 #endif // AI_BACKEND_CLAUDE_H

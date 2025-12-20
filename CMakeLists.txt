@@ -97,6 +97,7 @@ set(SOURCES
     src/ai_prompt_builder.cpp
     src/ai_backend_claude.cpp
     src/ai_backend_llamacpp.cpp
+    src/library_search.cpp
 )
 
 set(HEADERS
@@ -107,6 +108,7 @@ set(HEADERS
     src/ai_prompt_builder.h
     src/ai_backend_claude.h
     src/ai_backend_llamacpp.h
+    src/library_search.h
 )
 
 # Create executable
