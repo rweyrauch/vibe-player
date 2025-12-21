@@ -253,6 +253,13 @@ int main(int argc, char *argv[])
             std::cerr << "Error: Failed to parse playlist from stdin" << std::endl;
             return 1;
         }
+
+        // Reopen stdin to /dev/tty for keyboard input in interactive mode
+        if (interactive) {
+            if (!freopen("/dev/tty", "r", stdin)) {
+                std::cerr << "Warning: Could not reopen stdin for keyboard input" << std::endl;
+            }
+        }
     } else if (file_mode) {
         // Single file mode
         std::string filepath = result["file"].as<std::string>();
