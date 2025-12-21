@@ -10,7 +10,7 @@
 using json = nlohmann::json;
 
 MetadataCache::MetadataCache(const std::string& cache_dir)
-    : cache_dir_(cache_dir.empty() ? std::string(getenv("HOME")) + "/.cache/cli-player" : cache_dir) {
+    : cache_dir_(cache_dir.empty() ? std::string(getenv("HOME")) + "/.cache/vibe-player" : cache_dir) {
     ensureCacheDirectoryExists();
 }
 

@@ -37,14 +37,14 @@ void InitializeLogger(bool verbose)
 
     // Create log directory if it doesn't exist
     std::string home = std::getenv("HOME") ? std::getenv("HOME") : ".";
-    fs::path log_dir = fs::path(home) / ".cache" / "cli-player";
+    fs::path log_dir = fs::path(home) / ".cache" / "vibe-player";
 
     try {
         fs::create_directories(log_dir);
 
         // Create file logger
-        auto log_path = log_dir / "cli-player.log";
-        auto logger = spdlog::basic_logger_mt("cli-player", log_path.string());
+        auto log_path = log_dir / "vibe-player.log";
+        auto logger = spdlog::basic_logger_mt("vibe-player", log_path.string());
         spdlog::set_default_logger(logger);
 
         // Set log level based on verbose flag
@@ -279,8 +279,8 @@ std::vector<TrackMetadata> GetLibraryMetadata(
 int main(int argc, char *argv[])
 { 
     // Parse command line arguments using cxxopts
-    cxxopts::Options options("cli-player",
-                             "CLI Audio Player - Play audio files from command line");
+    cxxopts::Options options("vibe-player",
+                             "Vibe CLI Audio Player - Play audio files from command line");
 
     options.add_options()("d,directory", "Play all audio files in a directory", cxxopts::value<std::string>())
                          ("f,file", "Play a single audio file", cxxopts::value<std::string>())

@@ -534,7 +534,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 ### Piping Issues
 
 **"Failed to parse playlist from stdin"**
-- Ensure cli-playlist writes valid JSON: `./vibe-playlist ... | jq .`
+- Ensure vibe-playlist writes valid JSON: `./vibe-playlist ... | jq .`
 - Check for errors on stderr: `./vibe-playlist ... 2>&1 | less`
 
 ## Debugging

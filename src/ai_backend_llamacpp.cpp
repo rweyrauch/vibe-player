@@ -269,7 +269,7 @@ std::optional<std::vector<std::string>> LlamaCppBackend::generate(
     spdlog::debug("Context size: {}, Threads: {}", config_.context_size, config_.threads);
 
     // Flush logs before potentially crashing operation
-    if (auto logger = spdlog::get("cli-player")) {
+    if (auto logger = spdlog::get("vibe-player")) {
         logger->flush();
     }
 
@@ -282,7 +282,7 @@ std::optional<std::vector<std::string>> LlamaCppBackend::generate(
 
     // Generate text with streaming
     spdlog::debug("About to call generateText()");
-    if (auto logger = spdlog::get("cli-player")) {
+    if (auto logger = spdlog::get("vibe-player")) {
         logger->flush();
     }
 

@@ -13,7 +13,7 @@ Makefile
 !CMakeLists.txt
 
 # Compiled binaries
-cli-player
+vibe-player
 *.o
 *.a
 *.so
