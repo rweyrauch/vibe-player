@@ -205,8 +205,8 @@ std::string readStdin()
 int main(int argc, char *argv[])
 {
     // Parse command line arguments using cxxopts
-    cxxopts::Options options("cli-player",
-                             "CLI Audio Player - Play audio playlists");
+    cxxopts::Options options("vibe-player",
+                             "Vibe Player - Play audio playlists");
 
     options.add_options()
         ("playlist", "Playlist file to play", cxxopts::value<std::string>())
@@ -296,7 +296,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    std::cout << "\nCLI Audio Player - " << playlist.size() << " track(s)";
+    std::cout << "\nVibe Player - " << playlist.size() << " track(s)";
     if (interactive) {
         std::cout << " - Press 'h' for help, 'p' to play\n" << std::endl;
     } else {

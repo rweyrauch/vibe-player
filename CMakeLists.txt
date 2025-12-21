@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(cli-player VERSION 1.0.0 LANGUAGES CXX)
+project(vibe-player VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -89,21 +89,21 @@ include_directories(${taglib_SOURCE_DIR}/taglib/mpeg/id3v2)
 include_directories(${taglib_BINARY_DIR})
 
 # Common library (shared code)
-add_library(cli-player-common STATIC
+add_library(vibe-player-common STATIC
     src/player.cpp
     src/metadata.cpp
     src/metadata_cache.cpp
     src/playlist.cpp
 )
 
-target_link_libraries(cli-player-common
+target_link_libraries(vibe-player-common
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     tag
 )
 
 # Playlist generator executable
-add_executable(cli-playlist
+add_executable(vibe-playlist
     src/main_playlist_gen.cpp
     src/ai_prompt_builder.cpp
     src/ai_backend_claude.cpp
@@ -111,8 +111,8 @@ add_executable(cli-playlist
     src/library_search.cpp
 )
 
-target_link_libraries(cli-playlist
-    cli-player-common
+target_link_libraries(vibe-playlist
+    vibe-player-common
     cxxopts::cxxopts
     nlohmann_json::nlohmann_json
     httplib::httplib
@@ -127,12 +127,12 @@ target_link_libraries(cli-playlist
 )
 
 # Player executable
-add_executable(cli-player
+add_executable(vibe-player
     src/main_player.cpp
 )
 
-target_link_libraries(cli-player
-    cli-player-common
+target_link_libraries(vibe-player
+    vibe-player-common
     cxxopts::cxxopts
     nlohmann_json::nlohmann_json
     spdlog::spdlog
@@ -142,14 +142,14 @@ target_link_libraries(cli-player
 )
 
 # Installation
-install(TARGETS cli-player cli-playlist DESTINATION bin)
+install(TARGETS vibe-player vibe-playlist DESTINATION bin)
 
 # CPack configuration for creating .deb packages
 set(CPACK_GENERATOR "DEB")
-set(CPACK_PACKAGE_NAME "cli-player")
+set(CPACK_PACKAGE_NAME "vibe-player")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "CLI Audio Player - Terminal-based audio player")
-set(CPACK_PACKAGE_DESCRIPTION "A command-line audio player supporting WAV, MP3, FLAC, and OGG formats. Features include playback controls, volume adjustment, seeking, and directory playlist support.")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Vibe Player - AI-powered music player and playlist generator")
+set(CPACK_PACKAGE_DESCRIPTION "An AI-powered command-line music player and playlist generator. Features include AI playlist generation, playback controls, volume adjustment, seeking, and full library search.")
 set(CPACK_PACKAGE_CONTACT "Rick Weyrauch <rpweyrauch@gmail.com>")
 set(CPACK_PACKAGE_VENDOR "Rick Weyrauch")
 
@@ -158,7 +158,7 @@ set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Rick Weyrauch <rpweyrauch@gmail.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "libssl3 (>= 3.0)")
-set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rpweyrauch/cli-player")
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/rpweyrauch/vibe-player")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
 # Package metadata

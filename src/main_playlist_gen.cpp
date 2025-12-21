@@ -22,14 +22,14 @@ void InitializeLogger(bool verbose)
 
     // Create log directory if it doesn't exist
     std::string home = std::getenv("HOME") ? std::getenv("HOME") : ".";
-    fs::path log_dir = fs::path(home) / ".cache" / "cli-playlist";
+    fs::path log_dir = fs::path(home) / ".cache" / "vibe-playlist";
 
     try {
         fs::create_directories(log_dir);
 
         // Create file logger
-        auto log_path = log_dir / "cli-playlist.log";
-        auto logger = spdlog::basic_logger_mt("cli-playlist", log_path.string());
+        auto log_path = log_dir / "vibe-playlist.log";
+        auto logger = spdlog::basic_logger_mt("vibe-playlist", log_path.string());
         spdlog::set_default_logger(logger);
 
         // Set log level based on verbose flag
@@ -40,7 +40,7 @@ void InitializeLogger(bool verbose)
             spdlog::set_level(spdlog::level::info);
         }
 
-        spdlog::info("CLI Playlist Generator started");
+        spdlog::info("Vibe Playlist Generator started");
         spdlog::info("Log file: {}", log_path.string());
 
     } catch (const std::exception& e) {
@@ -79,8 +79,8 @@ std::vector<TrackMetadata> GetLibraryMetadata(
 int main(int argc, char *argv[])
 {
     // Parse command line arguments using cxxopts
-    cxxopts::Options options("cli-playlist",
-                             "CLI Playlist Generator - Generate music playlists");
+    cxxopts::Options options("vibe-playlist",
+                             "Vibe Playlist Generator - Generate music playlists");
 
     options.add_options()
         ("d,directory", "Generate playlist from directory", cxxopts::value<std::string>())

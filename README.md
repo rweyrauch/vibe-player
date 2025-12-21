@@ -1,4 +1,4 @@
-# CLI Audio Player & Playlist Generator
+# Vibe Player - AI Music Player & Playlist Generator
 
 > **🎵 "upbeat workout songs" → Perfect 25-track playlist in 10 seconds**
 >
@@ -6,12 +6,12 @@
 
 **AI-powered music curation** meets Unix philosophy. A modular command-line audio toolset for Linux:
 
-- **cli-playlist**: Generate playlists from directories, files, or **AI prompts** ✨
-- **cli-player**: Play playlists with full interactive controls
+- **vibe-playlist**: Generate playlists from directories, files, or **AI prompts** ✨
+- **vibe-player**: Play playlists with full interactive controls
 
 ```bash
 # Just describe what you want to hear
-./cli-playlist --library ~/Music --prompt "upbeat workout music" | ./cli-player --stdin
+./vibe-playlist --library ~/Music --prompt "upbeat workout music" | ./vibe-player --stdin
 ```
 
 ## Philosophy
@@ -41,7 +41,7 @@ This toolset is designed around separation of concerns:
 - ⚡ **Fast** - Results in 5-15 seconds
 - 🔒 **Private option** - Use llama.cpp for completely offline generation
 
-### cli-playlist (Playlist Generator)
+### vibe-playlist (Playlist Generator)
 
 - ✨ **AI-powered curation** from natural language descriptions
   - Cloud-based with Claude API (fast, high quality)
@@ -52,7 +52,7 @@ This toolset is designed around separation of concerns:
 - Shuffle support
 - Output to stdout (for piping) or save to file
 
-### cli-player (Audio Player)
+### vibe-player (Audio Player)
 
 - Play playlists from files or stdin
 - Full interactive controls (play, pause, seek, volume)
@@ -88,7 +88,7 @@ cmake ..
 make
 ```
 
-This creates two executables: `cli-playlist` and `cli-player`.
+This creates two executables: `vibe-playlist` and `vibe-player`.
 
 ## Quick Start
 
@@ -101,7 +101,7 @@ This creates two executables: `cli-playlist` and `cli-player`.
 
 2. **Describe what you want to hear:**
    ```bash
-   ./cli-playlist --library ~/Music --prompt "upbeat workout songs" | ./cli-player --stdin
+   ./vibe-playlist --library ~/Music --prompt "upbeat workout songs" | ./vibe-player --stdin
    ```
 
 That's it! Claude will search your entire library and create a perfect playlist in seconds.
@@ -110,11 +110,11 @@ That's it! Claude will search your entire library and create a perfect playlist 
 
 ```bash
 # From a directory
-./cli-playlist --directory ~/Music/Jazz > jazz.json
-./cli-player jazz.json
+./vibe-playlist --directory ~/Music/Jazz > jazz.json
+./vibe-player jazz.json
 
 # Direct pipe
-./cli-playlist --directory ~/Music | ./cli-player --stdin
+./vibe-playlist --directory ~/Music | ./vibe-player --stdin
 ```
 
 ## Why AI Playlists?
@@ -139,7 +139,7 @@ That's it! Claude will search your entire library and create a perfect playlist 
 # 1. Browse folders, 2. Filter by genre, 3. Manually add 20+ songs, 4. Hope it fits
 
 # AI approach (one command):
-./cli-playlist --library ~/Music --prompt "energetic indie rock for coding"
+./vibe-playlist --library ~/Music --prompt "energetic indie rock for coding"
 ```
 
 **The AI understands:**
@@ -151,35 +151,35 @@ That's it! Claude will search your entire library and create a perfect playlist 
 
 ## Usage
 
-### cli-playlist: Generate Playlists
+### vibe-playlist: Generate Playlists
 
 **From a directory:**
 ```bash
 # Output to stdout (for piping)
-./cli-playlist --directory ~/Music/Jazz
+./vibe-playlist --directory ~/Music/Jazz
 
 # Save to file
-./cli-playlist --directory ~/Music/Jazz --save jazz.json
+./vibe-playlist --directory ~/Music/Jazz --save jazz.json
 
 # With shuffle
-./cli-playlist --directory ~/Music --shuffle > shuffled.json
+./vibe-playlist --directory ~/Music --shuffle > shuffled.json
 ```
 
 **From a single file:**
 ```bash
-./cli-playlist --file song.mp3
+./vibe-playlist --file song.mp3
 ```
 
 **AI-powered generation (see [AI Playlist Generation](#ai-playlist-generation)):**
 ```bash
 # Using Claude API
-./cli-playlist --library ~/Music --prompt "chill vibes for studying"
+./vibe-playlist --library ~/Music --prompt "chill vibes for studying"
 
 # Save AI playlist
-./cli-playlist --library ~/Music --prompt "90s rock" --save rock90s.json
+./vibe-playlist --library ~/Music --prompt "90s rock" --save rock90s.json
 
 # With model selection
-./cli-playlist --library ~/Music --prompt "jazz" --claude-model balanced
+./vibe-playlist --library ~/Music --prompt "jazz" --claude-model balanced
 ```
 
 **Options:**
@@ -192,31 +192,31 @@ That's it! Claude will search your entire library and create a perfect playlist 
 - `--force-scan` - Force metadata rescan (ignore cache)
 - `--verbose` - Enable debug logging
 
-### cli-player: Play Playlists
+### vibe-player: Play Playlists
 
 **From a file:**
 ```bash
-./cli-player playlist.json
+./vibe-player playlist.json
 ```
 
 **From stdin (piped):**
 ```bash
-cat playlist.json | ./cli-player --stdin
-./cli-playlist --directory ~/Music | ./cli-player --stdin
+cat playlist.json | ./vibe-player --stdin
+./vibe-playlist --directory ~/Music | ./vibe-player --stdin
 ```
 
 **Direct file playback:**
 ```bash
-./cli-player --file song.mp3
+./vibe-player --file song.mp3
 ```
 
 **With options:**
 ```bash
 # Repeat mode
-./cli-player playlist.json --repeat
+./vibe-player playlist.json --repeat
 
 # Non-interactive (auto-play, no controls)
-./cli-player playlist.json --no-interactive
+./vibe-player playlist.json --no-interactive
 ```
 
 **Options:**
@@ -271,10 +271,10 @@ Get your API key from [console.anthropic.com](https://console.anthropic.com)
 
 ```bash
 # Basic usage (fast model)
-./cli-playlist --library ~/Music --prompt "upbeat workout songs"
+./vibe-playlist --library ~/Music --prompt "upbeat workout songs"
 
 # With model selection
-./cli-playlist --library ~/Music --prompt "chill jazz" --claude-model balanced
+./vibe-playlist --library ~/Music --prompt "chill jazz" --claude-model balanced
 
 # Model options:
 #   fast     - Claude 3.5 Haiku (fastest, cheapest)
@@ -282,7 +282,7 @@ Get your API key from [console.anthropic.com](https://console.anthropic.com)
 #   best     - Claude Sonnet 4.5 (highest quality, most capable)
 
 # Save the playlist
-./cli-playlist --library ~/Music --prompt "90s alternative rock" --save 90s.json
+./vibe-playlist --library ~/Music --prompt "90s alternative rock" --save 90s.json
 ```
 
 **How it works:**
@@ -294,7 +294,7 @@ Get your API key from [console.anthropic.com](https://console.anthropic.com)
 
 **Example:**
 ```bash
-$ ./cli-playlist --library ~/Music --prompt "upbeat workout songs" --claude-model balanced
+$ ./vibe-playlist --library ~/Music --prompt "upbeat workout songs" --claude-model balanced
 Using cached metadata (7299 tracks)
 Generating AI playlist using tool search...
 Searching library...
@@ -332,7 +332,7 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 2. Generate playlist:
 
 ```bash
-./cli-playlist \
+./vibe-playlist \
     --library ~/Music \
     --prompt "relaxing ambient music" \
     --ai-backend llamacpp \
@@ -438,33 +438,33 @@ The power of this design is in composition:
 
 ```bash
 # Generate once
-./cli-playlist --library ~/Music --prompt "workout music" --save workout.json
+./vibe-playlist --library ~/Music --prompt "workout music" --save workout.json
 
 # Play many times
-./cli-player workout.json
-./cli-player workout.json --repeat
+./vibe-player workout.json
+./vibe-player workout.json --repeat
 ```
 
 ### Quick Playback
 
 ```bash
 # Generate and play immediately
-./cli-playlist --directory ~/Music/Jazz | ./cli-player --stdin
+./vibe-playlist --directory ~/Music/Jazz | ./vibe-player --stdin
 ```
 
 ### Build Your Own Workflow
 
 ```bash
 # Generate multiple playlists
-./cli-playlist --directory ~/Music/Rock --save rock.json
-./cli-playlist --library ~/Music --prompt "chill vibes" --save chill.json
+./vibe-playlist --directory ~/Music/Rock --save rock.json
+./vibe-playlist --library ~/Music --prompt "chill vibes" --save chill.json
 
 # Choose which to play
-./cli-player rock.json
-./cli-player chill.json --repeat
+./vibe-player rock.json
+./vibe-player chill.json --repeat
 
 # Combine with other tools
-./cli-playlist --directory ~/Music | jq '.tracks | length'  # Count tracks
+./vibe-playlist --directory ~/Music | jq '.tracks | length'  # Count tracks
 ```
 
 ## Interactive Controls
@@ -524,7 +524,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 **"Error loading audio file"**
 - Check file exists and is readable
 - Verify format is supported (WAV, MP3, FLAC, OGG)
-- Try playing the file directly: `./cli-player --file song.mp3`
+- Try playing the file directly: `./vibe-player --file song.mp3`
 
 **No sound**
 - Check system volume
@@ -534,24 +534,24 @@ export ANTHROPIC_API_KEY="your-key-here"
 ### Piping Issues
 
 **"Failed to parse playlist from stdin"**
-- Ensure cli-playlist writes valid JSON: `./cli-playlist ... | jq .`
-- Check for errors on stderr: `./cli-playlist ... 2>&1 | less`
+- Ensure cli-playlist writes valid JSON: `./vibe-playlist ... | jq .`
+- Check for errors on stderr: `./vibe-playlist ... 2>&1 | less`
 
 ## Debugging
 
 Enable verbose logging for detailed diagnostics:
 
 ```bash
-./cli-playlist --library ~/Music --prompt "jazz" --verbose
+./vibe-playlist --library ~/Music --prompt "jazz" --verbose
 ```
 
 Logs are written to:
-- `~/.cache/cli-playlist/cli-playlist.log` (generator)
-- `~/.cache/cli-player/cli-player.log` (player)
+- `~/.cache/vibe-playlist/vibe-playlist.log` (generator)
+- `~/.cache/vibe-player/vibe-player.log` (player)
 
 View logs:
 ```bash
-tail -f ~/.cache/cli-playlist/cli-playlist.log
+tail -f ~/.cache/vibe-playlist/vibe-playlist.log
 ```
 
 Logs include:
@@ -577,7 +577,7 @@ Logs include:
                    │
                    ▼
          ┌─────────────────────┐
-         │   cli-playlist      │
+         │   vibe-playlist     │
          │  (Generator)        │
          ├─────────────────────┤
          │ • Directory scan    │
@@ -588,7 +588,7 @@ Logs include:
                     │
                     ▼ JSON (stdout or file)
          ┌──────────────────────┐
-         │   cli-player         │
+         │   vibe-player        │
          │  (Playback)          │
          ├──────────────────────┤
          │ • JSON parser        │
@@ -652,10 +652,10 @@ What this is NOT:
 ### Project Structure
 
 ```
-cli-player/
+vibe-player/
 ├── src/
-│   ├── main_playlist_gen.cpp    # cli-playlist application
-│   ├── main_player.cpp          # cli-player application
+│   ├── main_playlist_gen.cpp    # vibe-playlist application
+│   ├── main_player.cpp          # vibe-player application
 │   ├── playlist.{h,cpp}         # Playlist data structure
 │   ├── player.{h,cpp}           # Audio playback engine
 │   ├── metadata.{h,cpp}         # Metadata extraction
