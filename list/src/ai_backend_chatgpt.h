@@ -7,7 +7,9 @@
 #define AI_BACKEND_CHATGPT_H
 
 #include "ai_backend.h"
+#include "library_search.h"
 #include <string>
+#include <nlohmann/json.hpp>
 
 // Model presets for easy selection
 enum class ChatGPTModel {
@@ -38,6 +40,15 @@ public:
     static ChatGPTModel parseModelPreset(const std::string& preset);
 
 private:
+    // Tool definitions for function calling
+    nlohmann::json buildToolDefinitions() const;
+
+    // Execute a tool call
+    nlohmann::json executeToolCall(
+        const std::string& function_name,
+        const nlohmann::json& arguments,
+        const LibrarySearch& search_engine) const;
+
     std::string api_key_;
     std::string model_;
     static constexpr const char* API_ENDPOINT = "api.openai.com";
