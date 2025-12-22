@@ -9,6 +9,7 @@
 #include "ai_backend.h"
 #include "ai_backend_claude.h"
 #include "ai_backend_llamacpp.h"
+#include "ai_backend_chatgpt.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -92,9 +93,11 @@ int main(int argc, char *argv[])
         ("f,file", "Generate playlist from single file", cxxopts::value<std::string>())
         ("l,library", "Music library path for AI playlist generation", cxxopts::value<std::string>())
         ("p,prompt", "Generate AI playlist from description", cxxopts::value<std::string>())
-        ("ai-backend", "AI backend: 'claude' or 'llamacpp' (default: claude)",
+        ("ai-backend", "AI backend: 'claude', 'chatgpt', or 'llamacpp' (default: claude)",
             cxxopts::value<std::string>()->default_value("claude"))
         ("claude-model", "Claude model preset: 'fast' (Haiku), 'balanced' (Sonnet), 'best' (Opus) or full model ID (default: fast)",
+            cxxopts::value<std::string>()->default_value("fast"))
+        ("chatgpt-model", "ChatGPT model preset: 'fast' (GPT-4o Mini), 'balanced' (GPT-4o), 'best' (GPT-4) or full model ID (default: fast)",
             cxxopts::value<std::string>()->default_value("fast"))
         ("ai-model", "Path to GGUF model file (required for llamacpp backend)",
             cxxopts::value<std::string>())
@@ -217,9 +220,32 @@ int main(int argc, char *argv[])
 
             backend = std::move(llamacpp_backend);
 
+        } else if (backend_type == "chatgpt") {
+            // Check for API key
+            const char* api_key = std::getenv("OPENAI_API_KEY");
+            if (!api_key || strlen(api_key) == 0) {
+                std::cerr << "Error: OPENAI_API_KEY environment variable not set" << std::endl;
+                std::cerr << "Set it with: export OPENAI_API_KEY=your_key_here" << std::endl;
+                return 1;
+            }
+
+            // Get model selection
+            std::string model_selection = result["chatgpt-model"].as<std::string>();
+
+            // Check if it's a preset or a full model ID
+            if (model_selection == "fast" || model_selection == "balanced" ||
+                model_selection == "best" || model_selection == "mini" ||
+                model_selection == "gpt-4o" || model_selection == "gpt-4") {
+                ChatGPTModel model = ChatGPTBackend::parseModelPreset(model_selection);
+                backend = std::make_unique<ChatGPTBackend>(api_key, model);
+            } else {
+                // Use as full model ID
+                backend = std::make_unique<ChatGPTBackend>(api_key, model_selection);
+            }
+
         } else {
             std::cerr << "Error: Invalid AI backend '" << backend_type << "'" << std::endl;
-            std::cerr << "Valid options: 'claude' or 'llamacpp'" << std::endl;
+            std::cerr << "Valid options: 'claude', 'chatgpt', or 'llamacpp'" << std::endl;
             return 1;
         }
 

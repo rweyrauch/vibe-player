@@ -4,6 +4,7 @@ add_executable(vibe-playlist
     src/ai_prompt_builder.cpp
     src/ai_backend_claude.cpp
     src/ai_backend_llamacpp.cpp
+    src/ai_backend_chatgpt.cpp
     src/library_search.cpp
 )
 
