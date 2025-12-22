@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <filesystem>
 
 using json = nlohmann::json;
 
@@ -10,8 +11,96 @@ Playlist::Playlist(const std::vector<TrackMetadata>& tracks)
     : tracks_(tracks), current_index_(0) {
 }
 
+Playlist::Playlist(const std::vector<std::string>& paths, const std::string& base_path)
+    : paths_(paths), base_path_(base_path), current_index_(0) {
+}
+
 Playlist Playlist::fromTracks(const std::vector<TrackMetadata>& tracks) {
     return Playlist(tracks);
+}
+
+std::string Playlist::resolvePath(const std::string& path) const {
+    namespace fs = std::filesystem;
+
+    // Handle home directory expansion
+    std::string resolved = path;
+    if (path.starts_with("~/")) {
+        const char* home = std::getenv("HOME");
+        if (home) {
+            resolved = std::string(home) + path.substr(1);
+        }
+    }
+
+    // Check if absolute path
+    fs::path p(resolved);
+    if (p.is_absolute()) {
+        // Return canonical path if file exists, otherwise return as-is
+        if (fs::exists(p)) {
+            return fs::canonical(p).string();
+        }
+        return resolved;
+    }
+
+    // Relative path - resolve against base_path_
+    if (!base_path_.empty()) {
+        fs::path base(base_path_);
+        fs::path full = base / p;
+        if (fs::exists(full)) {
+            return fs::canonical(full).string();
+        }
+    }
+
+    // Try current working directory as fallback
+    if (fs::exists(p)) {
+        return fs::canonical(p).string();
+    }
+
+    // Return as-is if file doesn't exist (will fail later)
+    return resolved;
+}
+
+std::optional<Playlist> Playlist::fromPaths(const std::vector<std::string>& paths, const std::string& base_path) {
+    if (paths.empty()) {
+        std::cerr << "Error: Path list is empty" << std::endl;
+        return std::nullopt;
+    }
+
+    return Playlist(paths, base_path);
+}
+
+std::optional<Playlist> Playlist::fromTextFile(const std::string& filepath) {
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open playlist file: " << filepath << std::endl;
+        return std::nullopt;
+    }
+
+    std::vector<std::string> paths;
+    std::string line;
+
+    // Store base directory for relative path resolution
+    namespace fs = std::filesystem;
+    std::string base_dir = fs::path(filepath).parent_path().string();
+
+    while (std::getline(file, line)) {
+        // Trim whitespace
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+
+        // Skip empty lines and comments
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        paths.push_back(line);
+    }
+
+    if (paths.empty()) {
+        std::cerr << "Error: Playlist contains no valid paths" << std::endl;
+        return std::nullopt;
+    }
+
+    return fromPaths(paths, base_dir);
 }
 
 std::optional<Playlist> Playlist::fromJson(const std::string& json_content) {
@@ -60,9 +149,25 @@ std::optional<Playlist> Playlist::fromFile(const std::string& filepath) {
         return std::nullopt;
     }
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return fromJson(buffer.str());
+    // Read first non-whitespace character to detect format
+    char first_char = '\0';
+    file >> std::ws;
+    if (file.peek() != EOF) {
+        first_char = file.peek();
+    }
+    file.close();
+
+    // Auto-detect format
+    if (first_char == '{' || first_char == '[') {
+        // JSON format
+        std::ifstream json_file(filepath);
+        std::stringstream buffer;
+        buffer << json_file.rdbuf();
+        return fromJson(buffer.str());
+    } else {
+        // Text format
+        return fromTextFile(filepath);
+    }
 }
 
 std::string Playlist::toJson() const {
@@ -78,14 +183,37 @@ std::string Playlist::toJson() const {
     return playlist_json.dump(2);  // Pretty print with 2-space indent
 }
 
-bool Playlist::saveToFile(const std::string& filepath) const {
+std::string Playlist::toText() const {
+    std::ostringstream output;
+
+    // If we have paths, use those (new format)
+    if (!paths_.empty()) {
+        for (const auto& path : paths_) {
+            // Resolve to absolute path
+            output << resolvePath(path) << "\n";
+        }
+    } else if (!tracks_.empty()) {
+        // If we have tracks, extract paths (for backward compatibility)
+        for (const auto& track : tracks_) {
+            output << track.filepath << "\n";
+        }
+    }
+
+    return output.str();
+}
+
+bool Playlist::saveToFile(const std::string& filepath, PlaylistFormat format) const {
     std::ofstream file(filepath);
     if (!file.is_open()) {
         std::cerr << "Error: Could not open file for writing: " << filepath << std::endl;
         return false;
     }
 
-    file << toJson();
+    if (format == PlaylistFormat::JSON) {
+        file << toJson();
+    } else {
+        file << toText();
+    }
     return true;
 }
 
@@ -93,8 +221,21 @@ const TrackMetadata& Playlist::current() const {
     return tracks_[current_index_];
 }
 
+const std::string& Playlist::currentPath() const {
+    if (!paths_.empty()) {
+        return paths_[current_index_];
+    }
+    // Fallback to filepath from metadata
+    static std::string empty_path;
+    if (!tracks_.empty() && current_index_ < tracks_.size()) {
+        return tracks_[current_index_].filepath;
+    }
+    return empty_path;
+}
+
 bool Playlist::advance() {
-    if (current_index_ < tracks_.size() - 1) {
+    size_t total_size = !paths_.empty() ? paths_.size() : tracks_.size();
+    if (current_index_ < total_size - 1) {
         current_index_++;
         return true;
     }
@@ -114,11 +255,12 @@ bool Playlist::hasPrevious() const {
 }
 
 bool Playlist::hasNext() const {
-    return current_index_ < tracks_.size() - 1;
+    size_t total_size = !paths_.empty() ? paths_.size() : tracks_.size();
+    return current_index_ < total_size - 1;
 }
 
 size_t Playlist::size() const {
-    return tracks_.size();
+    return !paths_.empty() ? paths_.size() : tracks_.size();
 }
 
 size_t Playlist::currentIndex() const {
@@ -126,11 +268,47 @@ size_t Playlist::currentIndex() const {
 }
 
 void Playlist::setIndex(size_t index) {
-    if (index < tracks_.size()) {
+    size_t total_size = !paths_.empty() ? paths_.size() : tracks_.size();
+    if (index < total_size) {
         current_index_ = index;
     }
 }
 
 void Playlist::reset() {
     current_index_ = 0;
+}
+
+void Playlist::extractAllMetadata() {
+    // If we already have tracks, nothing to do
+    if (!tracks_.empty()) {
+        return;
+    }
+
+    // Extract metadata from all paths
+    if (!paths_.empty()) {
+        tracks_.clear();
+        tracks_.reserve(paths_.size());
+
+        for (const auto& path : paths_) {
+            std::string resolved_path = resolvePath(path);
+            auto metadata = MetadataExtractor::extract(resolved_path, false);
+
+            if (metadata) {
+                tracks_.push_back(*metadata);
+            } else {
+                // Create minimal metadata with just filepath
+                TrackMetadata minimal;
+                minimal.filepath = resolved_path;
+
+                namespace fs = std::filesystem;
+                fs::path p(resolved_path);
+                minimal.filename = p.filename().string();
+                minimal.title = p.stem().string();
+                minimal.duration_ms = 0;
+                minimal.file_mtime = 0;
+
+                tracks_.push_back(minimal);
+            }
+        }
+    }
 }

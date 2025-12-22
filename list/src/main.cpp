@@ -305,15 +305,22 @@ int main(int argc, char *argv[])
     // Output playlist
     if (save_to_file) {
         std::string filename = result["save"].as<std::string>();
-        if (playlist.saveToFile(filename)) {
+
+        // Determine format from extension or default to text
+        PlaylistFormat format = PlaylistFormat::TEXT;
+        if (filename.ends_with(".json")) {
+            format = PlaylistFormat::JSON;
+        }
+
+        if (playlist.saveToFile(filename, format)) {
             std::cerr << "Playlist saved to: " << filename << std::endl;
         } else {
             std::cerr << "Error: Failed to save playlist to file" << std::endl;
             return 1;
         }
     } else {
-        // Output to stdout
-        std::cout << playlist.toJson() << std::endl;
+        // Output to stdout as text (just paths)
+        std::cout << playlist.toText() << std::endl;
     }
 
     return 0;

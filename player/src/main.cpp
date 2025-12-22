@@ -247,8 +247,35 @@ int main(int argc, char *argv[])
 
     if (stdin_mode) {
         // Read from stdin
-        std::string json_content = readStdin();
-        playlist_opt = Playlist::fromJson(json_content);
+        std::string content = readStdin();
+
+        // Auto-detect format
+        std::istringstream iss(content);
+        char first_char = '\0';
+        iss >> std::ws;
+        if (iss.peek() != EOF) {
+            first_char = iss.peek();
+        }
+
+        if (first_char == '{' || first_char == '[') {
+            // JSON format
+            playlist_opt = Playlist::fromJson(content);
+        } else {
+            // Text format - parse paths
+            std::vector<std::string> paths;
+            std::istringstream stream(content);
+            std::string line;
+            while (std::getline(stream, line)) {
+                // Trim whitespace
+                line.erase(0, line.find_first_not_of(" \t\r\n"));
+                line.erase(line.find_last_not_of(" \t\r\n") + 1);
+                if (!line.empty() && line[0] != '#') {
+                    paths.push_back(line);
+                }
+            }
+            playlist_opt = Playlist::fromPaths(paths);
+        }
+
         if (!playlist_opt) {
             std::cerr << "Error: Failed to parse playlist from stdin" << std::endl;
             return 1;
@@ -284,6 +311,9 @@ int main(int argc, char *argv[])
     }
 
     Playlist playlist = *playlist_opt;
+
+    // Extract metadata for all tracks upfront (for text-based playlists)
+    playlist.extractAllMetadata();
 
     if (playlist.empty()) {
         std::cerr << "Error: Playlist is empty" << std::endl;
