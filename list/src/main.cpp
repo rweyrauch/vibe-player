@@ -65,19 +65,18 @@ std::vector<TrackMetadata> GetLibraryMetadata(
     if (!force_rescan) {
         auto cached = cache.load(library_path);
         if (cached && cache.isValid(library_path, *cached)) {
-            std::cerr << "Using cached metadata (" << cached->size()
-                     << " tracks)" << std::endl;
+            spdlog::info("Using cached metadata ({} tracks)", cached->size());
             return *cached;
         }
     }
 
-    std::cerr << "Scanning library and extracting metadata..." << std::endl;
+    spdlog::info("Scanning library and extracting metadata...");
     auto metadata = MetadataExtractor::extractFromDirectory(library_path, true, verbose);
 
-    std::cerr << "Extracted metadata for " << metadata.size() << " tracks" << std::endl;
+    spdlog::info("Extracted metadata for {} tracks", metadata.size());
 
     if (!cache.save(library_path, metadata)) {
-        std::cerr << "Warning: Failed to save metadata cache" << std::endl;
+        spdlog::warn("Failed to save metadata cache");
     }
 
     return metadata;
@@ -123,7 +122,7 @@ int main(int argc, char *argv[])
     catch (const cxxopts::exceptions::exception &e)
     {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
-        std::cout << options.help() << std::endl;
+        std::cerr << options.help() << std::endl;
         return 1;
     }
 
@@ -149,7 +148,7 @@ int main(int argc, char *argv[])
         if (!result.count("library"))
         {
             std::cerr << "Error: --library required with --prompt" << std::endl;
-            std::cout << options.help() << std::endl;
+            std::cerr << options.help() << std::endl;
             return 1;
         }
 
@@ -213,9 +212,9 @@ int main(int argc, char *argv[])
             // Setup streaming callback for progress
             stream_cb = [](const std::string& chunk, bool is_final) {
                 if (!is_final) {
-                    std::cerr << chunk << std::flush;
+                    spdlog::debug(chunk);
                 } else {
-                    std::cerr << "\n";
+                    spdlog::debug("\n");
                 }
             };
 
@@ -286,15 +285,14 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        std::cerr << "Generated AI playlist with " << playlist_tracks.size()
-                  << " tracks" << std::endl;
+        spdlog::info("Generated AI playlist with {} tracks", playlist_tracks.size());
     }
     else if (result.count("directory"))
     {
         // Directory mode
         std::string dir_path = result["directory"].as<std::string>();
 
-        std::cerr << "Scanning directory and extracting metadata..." << std::endl;
+        spdlog::info("Scanning directory and extracting metadata...");
         playlist_tracks = MetadataExtractor::extractFromDirectory(dir_path, true, verbose);
 
         if (playlist_tracks.empty())
@@ -303,7 +301,7 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        std::cerr << "Found " << playlist_tracks.size() << " audio file(s) in directory" << std::endl;
+        spdlog::info("Found {} audio file(s) in directory", playlist_tracks.size());
     }
     else if (result.count("file"))
     {
@@ -322,7 +320,7 @@ int main(int argc, char *argv[])
     else
     {
         std::cerr << "Error: Please specify --directory, --file, or --prompt with --library" << std::endl;
-        std::cout << options.help() << std::endl;
+        std::cerr << options.help() << std::endl;
         return 1;
     }
 
@@ -332,7 +330,7 @@ int main(int argc, char *argv[])
         std::random_device rd;
         std::mt19937 g(rd());
         std::shuffle(playlist_tracks.begin(), playlist_tracks.end(), g);
-        std::cerr << "Playlist shuffled" << std::endl;
+        spdlog::info("Playlist shuffled");
     }
 
     // Create playlist object
@@ -351,7 +349,7 @@ int main(int argc, char *argv[])
         }
 
         if (playlist.saveToFile(filename, format)) {
-            std::cerr << "Playlist saved to: " << filename << std::endl;
+            spdlog::info("Playlist saved to: {}", filename);
         } else {
             std::cerr << "Error: Failed to save playlist to file" << std::endl;
             return 1;
