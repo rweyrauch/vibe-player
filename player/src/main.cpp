@@ -73,40 +73,59 @@ void PrintStatus(AudioPlayer &player, const Playlist &playlist)
     float vol = player.getVolume();
 
     std::string state;
-    if (player.isPlaying())
+    std::string state_color;
+    if (player.isPlaying()) {
         state = "Playing";
-    else if (player.isPaused())
+        state_color = BOLDGREEN;
+    }
+    else if (player.isPaused()) {
         state = "Paused";
-    else
+        state_color = BOLDYELLOW;
+    }
+    else {
         state = "Stopped";
+        state_color = BOLDRED;
+    }
 
     const TrackMetadata& track = playlist.current();
 
-    // Build display string: Artist - Album - Song
-    std::string display;
+    // Print state with color
+    std::cout << "\r[" << state_color << state << RESET << "] ";
+
+    // Print artist in cyan
     if (track.artist) {
-        display += TruncateString(*track.artist, 20) + " - ";
+        std::cout << CYAN << TruncateString(*track.artist, 20) << RESET << " - ";
     }
+
+    // Print album in blue
     if (track.album) {
-        display += TruncateString(*track.album, 20) + " - ";
+        std::cout << BLUE << TruncateString(*track.album, 20) << RESET << " - ";
     }
+
+    // Print title/filename in bold white
     if (track.title) {
-        display += TruncateString(*track.title, 20);
+        std::cout << BOLDWHITE << TruncateString(*track.title, 20) << RESET;
     } else {
-        display += TruncateString(track.filename, 20);
+        std::cout << BOLDWHITE << TruncateString(track.filename, 20) << RESET;
     }
 
-    std::cout << "\r[" << state << "] "
-              << display
-              << " | " << std::setfill('0') << std::setw(2) << (pos / 60000) << ":"
-              << std::setw(2) << ((pos/1000) % 60) << " / "
+    // Print time in green
+    std::cout << " | " << GREEN
+              << std::setfill('0') << std::setw(2) << (pos / 60000) << ":"
+              << std::setw(2) << ((pos/1000) % 60) << RESET
+              << " / " << GREEN
               << std::setw(2) << ((dur/1000) / 60) << ":"
-              << std::setw(2) << ((dur/1000) % 60)
-              << " | Vol: " << std::setfill(' ') << std::setw(3) << (int)(vol * 100) << "%";
+              << std::setw(2) << ((dur/1000) % 60) << RESET;
 
+    // Print volume in magenta
+    std::cout << " | Vol: " << MAGENTA << std::setfill(' ') << std::setw(3)
+              << (int)(vol * 100) << "%" << RESET;
+
+    // Print track number in yellow
     if (playlist.size() > 1)
     {
-        std::cout << " | Track " << (playlist.currentIndex() + 1) << "/" << playlist.size();
+        std::cout << " | Track " << YELLOW << (playlist.currentIndex() + 1)
+                  << RESET << "/" << YELLOW << playlist.size() << RESET;
     }
 
     std::cout << "          " << std::flush;
