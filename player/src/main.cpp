@@ -51,6 +51,21 @@ void PrintHelp()
               << std::endl;
 }
 
+std::string TruncateString(const std::string& str, size_t maxLength) {
+    // If the string is already short enough, return it as-is
+    if (str.length() <= maxLength) {
+        return str;
+    }
+    
+    // If maxLength is too small to include ellipsis, just return the truncated string
+    if (maxLength < 3) {
+        return str.substr(0, maxLength);
+    }
+    
+    // Truncate and append ellipsis
+    return str.substr(0, maxLength - 3) + "...";
+}
+
 void PrintStatus(AudioPlayer &player, const Playlist &playlist)
 {
     int pos = player.getPosition();
@@ -70,15 +85,15 @@ void PrintStatus(AudioPlayer &player, const Playlist &playlist)
     // Build display string: Artist - Album - Song
     std::string display;
     if (track.artist) {
-        display += *track.artist + " - ";
+        display += TruncateString(*track.artist, 20) + " - ";
     }
     if (track.album) {
-        display += *track.album + " - ";
+        display += TruncateString(*track.album, 20) + " - ";
     }
     if (track.title) {
-        display += *track.title;
+        display += TruncateString(*track.title, 20);
     } else {
-        display += track.filename;
+        display += TruncateString(track.filename, 20);
     }
 
     std::cout << "\r[" << state << "] "
