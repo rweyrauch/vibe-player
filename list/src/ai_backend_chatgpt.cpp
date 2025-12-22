@@ -87,6 +87,7 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
     );
 
     spdlog::debug("Prompt built with {} tracks", sampled_indices.size());
+    spdlog::debug("Using ChatGPT model: {}", model_);
 
     // Create HTTPS client
     httplib::SSLClient client(API_ENDPOINT);
@@ -95,8 +96,7 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
 
     // Set headers
     httplib::Headers headers = {
-        {"Authorization", "Bearer " + api_key_},
-        {"Content-Type", "application/json"}
+        {"Authorization", "Bearer " + api_key_}
     };
 
     // Build request body
@@ -113,6 +113,7 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
     };
 
     spdlog::debug("Sending request to OpenAI API");
+    spdlog::debug("Request body: {}", request_body.dump(2));
     auto response = client.Post("/v1/chat/completions", headers,
                                request_body.dump(), "application/json");
 
