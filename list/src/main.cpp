@@ -10,6 +10,7 @@
 #include "ai_backend_claude.h"
 #include "ai_backend_llamacpp.h"
 #include "ai_backend_chatgpt.h"
+#include "ai_backend_keyword.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -93,7 +94,7 @@ int main(int argc, char *argv[])
         ("f,file", "Generate playlist from single file", cxxopts::value<std::string>())
         ("l,library", "Music library path for AI playlist generation", cxxopts::value<std::string>())
         ("p,prompt", "Generate AI playlist from description", cxxopts::value<std::string>())
-        ("ai-backend", "AI backend: 'claude', 'chatgpt', or 'llamacpp' (default: claude)",
+        ("ai-backend", "AI backend: 'claude', 'chatgpt', 'llamacpp', or 'keyword' (default: claude)",
             cxxopts::value<std::string>()->default_value("claude"))
         ("claude-model", "Claude model preset: 'fast' (Haiku), 'balanced' (Sonnet), 'best' (Opus) or full model ID (default: fast)",
             cxxopts::value<std::string>()->default_value("fast"))
@@ -243,9 +244,13 @@ int main(int argc, char *argv[])
                 backend = std::make_unique<ChatGPTBackend>(api_key, model_selection);
             }
 
+        } else if (backend_type == "keyword") {
+            // Keyword matching backend - no configuration needed
+            backend = std::make_unique<KeywordBackend>();
+
         } else {
             std::cerr << "Error: Invalid AI backend '" << backend_type << "'" << std::endl;
-            std::cerr << "Valid options: 'claude', 'chatgpt', or 'llamacpp'" << std::endl;
+            std::cerr << "Valid options: 'claude', 'chatgpt', 'llamacpp', or 'keyword'" << std::endl;
             return 1;
         }
 
