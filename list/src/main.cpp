@@ -346,6 +346,8 @@ int main(int argc, char *argv[])
         PlaylistFormat format = PlaylistFormat::TEXT;
         if (filename.ends_with(".json")) {
             format = PlaylistFormat::JSON;
+        } else if (filename.ends_with(".m3u") || filename.ends_with(".m3u8")) {
+            format = PlaylistFormat::M3U;
         }
 
         if (playlist.saveToFile(filename, format)) {

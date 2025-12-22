@@ -14,6 +14,7 @@
 enum class PlaylistFormat {
     TEXT,
     JSON,
+    M3U,
     AUTO_DETECT
 };
 
@@ -29,6 +30,7 @@ public:
     // Serialization
     std::string toJson() const;
     std::string toText() const;
+    std::string toM3u() const;
     bool saveToFile(const std::string& filepath, PlaylistFormat format = PlaylistFormat::TEXT) const;
 
     // Navigation

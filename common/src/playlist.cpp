@@ -207,6 +207,47 @@ std::string Playlist::toText() const {
     return output.str();
 }
 
+std::string Playlist::toM3u() const {
+    std::ostringstream output;
+
+    // M3U header
+    output << "#EXTM3U\n";
+
+    // If we have tracks with metadata, use extended M3U format
+    if (!tracks_.empty()) {
+        for (const auto& track : tracks_) {
+            // Calculate duration in seconds
+            int duration_seconds = static_cast<int>(track.duration_ms / 1000);
+
+            // Build display name: "Artist - Title" or just title or filename
+            std::string display_name;
+            if (track.artist.has_value() && track.title.has_value()) {
+                display_name = track.artist.value() + " - " + track.title.value();
+            } else if (track.title.has_value()) {
+                display_name = track.title.value();
+            } else {
+                display_name = track.filename;
+            }
+
+            // Write EXTINF line: #EXTINF:duration,display name
+            output << "#EXTINF:" << duration_seconds << "," << display_name << "\n";
+
+            // Write file path
+            output << track.filepath << "\n";
+        }
+    } else if (!paths_.empty()) {
+        // If we only have paths (no metadata), write simple M3U format
+        for (const auto& path : paths_) {
+            // Write EXTINF with -1 (unknown duration)
+            output << "#EXTINF:-1,\n";
+            // Write resolved path
+            output << resolvePath(path) << "\n";
+        }
+    }
+
+    return output.str();
+}
+
 bool Playlist::saveToFile(const std::string& filepath, PlaylistFormat format) const {
     std::ofstream file(filepath);
     if (!file.is_open()) {
@@ -216,6 +257,8 @@ bool Playlist::saveToFile(const std::string& filepath, PlaylistFormat format) co
 
     if (format == PlaylistFormat::JSON) {
         file << toJson();
+    } else if (format == PlaylistFormat::M3U) {
+        file << toM3u();
     } else {
         file << toText();
     }
