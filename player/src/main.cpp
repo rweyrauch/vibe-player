@@ -66,6 +66,59 @@ std::string TruncateString(const std::string& str, size_t maxLength) {
     return str.substr(0, maxLength - 3) + "...";
 }
 
+std::string FixFieldString(const std::string& str, size_t maxLength, char padChar = ' ') {
+    // If the string is longer than maxLength, truncate it
+    if (str.length() > maxLength) {
+        // If maxLength is too small to include ellipsis, just return the truncated string
+        if (maxLength < 3) {
+            return str.substr(0, maxLength);
+        }
+        
+        // Truncate and append ellipsis
+        return str.substr(0, maxLength - 3) + "...";
+    }
+    
+    // If the string is shorter than maxLength, pad it
+    if (str.length() < maxLength) {
+        return str + std::string(maxLength - str.length(), padChar);
+    }
+    
+    // If the string is exactly maxLength, return it as-is
+    return str;
+}
+
+void InitializeLogger(bool verbose)
+{
+    namespace fs = std::filesystem;
+
+    // Create log directory if it doesn't exist
+    std::string home = std::getenv("HOME") ? std::getenv("HOME") : ".";
+    fs::path log_dir = fs::path(home) / ".cache" / "vibe-player";
+
+    try {
+        fs::create_directories(log_dir);
+
+        // Create file logger
+        auto log_path = log_dir / "vibe-player.log";
+        auto logger = spdlog::basic_logger_mt("vibe-player", log_path.string());
+        spdlog::set_default_logger(logger);
+
+        // Set log level based on verbose flag
+        if (verbose) {
+            spdlog::set_level(spdlog::level::debug);
+            spdlog::info("Verbose logging enabled");
+        } else {
+            spdlog::set_level(spdlog::level::info);
+        }
+
+        spdlog::info("Vibe Player started");
+        spdlog::info("Log file: {}", log_path.string());
+
+    } catch (const std::exception& e) {
+        std::cerr << "Warning: Failed to initialize logger: " << e.what() << std::endl;
+    }
+}
+
 void PrintStatus(AudioPlayer &player, const Playlist &playlist)
 {
     int pos = player.getPosition();
@@ -79,7 +132,7 @@ void PrintStatus(AudioPlayer &player, const Playlist &playlist)
         state_color = BOLDGREEN;
     }
     else if (player.isPaused()) {
-        state = "Paused";
+        state = "Paused ";
         state_color = BOLDYELLOW;
     }
     else {
@@ -92,43 +145,44 @@ void PrintStatus(AudioPlayer &player, const Playlist &playlist)
     // Print state with color
     std::cout << "\r[" << state_color << state << RESET << "] ";
 
-    // Print artist in cyan
+    // Print artist in  bold cyan
     if (track.artist) {
-        std::cout << CYAN << TruncateString(*track.artist, 20) << RESET << " - ";
+        std::cout << BOLDCYAN << FixFieldString(*track.artist, 15) << RESET << " - ";
     }
 
-    // Print album in blue
+    // Print album in cyan
     if (track.album) {
-        std::cout << BLUE << TruncateString(*track.album, 20) << RESET << " - ";
+        std::cout << CYAN << FixFieldString(*track.album, 15) << RESET << " - ";
     }
 
     // Print title/filename in bold white
     if (track.title) {
-        std::cout << BOLDWHITE << TruncateString(*track.title, 20) << RESET;
+        std::cout << BOLDWHITE << FixFieldString(*track.title, 30) << RESET;
     } else {
-        std::cout << BOLDWHITE << TruncateString(track.filename, 20) << RESET;
+        std::cout << BOLDWHITE << FixFieldString(track.filename, 30) << RESET;
     }
 
     // Print time in green
-    std::cout << " | " << GREEN
+    std::cout << "|" << GREEN
               << std::setfill('0') << std::setw(2) << (pos / 60000) << ":"
               << std::setw(2) << ((pos/1000) % 60) << RESET
-              << " / " << GREEN
+              << "/" << GREEN
               << std::setw(2) << ((dur/1000) / 60) << ":"
               << std::setw(2) << ((dur/1000) % 60) << RESET;
 
     // Print volume in magenta
-    std::cout << " | Vol: " << MAGENTA << std::setfill(' ') << std::setw(3)
+    std::cout << "|Vol:" << MAGENTA << std::setfill(' ') << std::setw(3)
               << (int)(vol * 100) << "%" << RESET;
 
     // Print track number in yellow
     if (playlist.size() > 1)
     {
-        std::cout << " | Track " << YELLOW << (playlist.currentIndex() + 1)
-                  << RESET << "/" << YELLOW << playlist.size() << RESET;
+        std::cout << "|Track " << YELLOW << std::setfill(' ') << std::setw(2) 
+                  << (playlist.currentIndex() + 1) << RESET << "/" << YELLOW 
+                  << playlist.size() << RESET;
     }
 
-    std::cout << "          " << std::flush;
+    std::cout << "     " << std::flush;
 }
 
 bool HandleCommand(char ch,
@@ -253,6 +307,7 @@ int main(int argc, char *argv[])
         ("stdin", "Read playlist from stdin")
         ("r,repeat", "Repeat playlist")
         ("no-interactive", "Disable interactive controls (auto-play only)")
+        ("verbose", "Display status and debug information")
         ("h,help", "Print usage");
 
     options.parse_positional({"playlist"});
@@ -280,6 +335,10 @@ int main(int argc, char *argv[])
     const bool stdin_mode = result.count("stdin") > 0;
     const bool file_mode = result.count("file") > 0;
     const bool interactive = result.count("no-interactive") == 0;
+    const bool verbose = result.count("verbose") > 0;
+
+    // Initialize logger
+    InitializeLogger(verbose);
 
     // Load playlist
     std::optional<Playlist> playlist_opt;
