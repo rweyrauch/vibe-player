@@ -315,7 +315,7 @@ std::optional<std::vector<std::string>> ClaudeBackend::generate(
                    << "Start by using get_library_overview to understand what's available, "
                    << "then use specific searches to find matching tracks.\n\n"
                    << "Once you've found suitable tracks, respond with a JSON array of track indices (0-based) "
-                   << "that best match the request. Select 10-30 tracks that fit the description.\n"
+                   << "that best match the request. Select 10-50 tracks that fit the description.\n"
                    << "Example final response: [42, 156, 892, 1043, ...]";
 
     // Initialize conversation

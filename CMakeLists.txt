@@ -88,62 +88,6 @@ include_directories(${taglib_SOURCE_DIR}/taglib/toolkit)
 include_directories(${taglib_SOURCE_DIR}/taglib/mpeg/id3v2)
 include_directories(${taglib_BINARY_DIR})
 
-# Common library (shared code)
-add_library(vibe-player-common STATIC
-    src/player.cpp
-    src/metadata.cpp
-    src/metadata_cache.cpp
-    src/playlist.cpp
-)
-
-target_link_libraries(vibe-player-common
-    nlohmann_json::nlohmann_json
-    spdlog::spdlog
-    tag
-)
-
-# Playlist generator executable
-add_executable(vibe-playlist
-    src/main_playlist_gen.cpp
-    src/ai_prompt_builder.cpp
-    src/ai_backend_claude.cpp
-    src/ai_backend_llamacpp.cpp
-    src/library_search.cpp
-)
-
-target_link_libraries(vibe-playlist
-    vibe-player-common
-    cxxopts::cxxopts
-    nlohmann_json::nlohmann_json
-    httplib::httplib
-    spdlog::spdlog
-    tag
-    llama
-    pthread
-    m
-    dl
-    ssl
-    crypto
-)
-
-# Player executable
-add_executable(vibe-player
-    src/main_player.cpp
-)
-
-target_link_libraries(vibe-player
-    vibe-player-common
-    cxxopts::cxxopts
-    nlohmann_json::nlohmann_json
-    spdlog::spdlog
-    tag
-    pthread
-    m
-)
-
-# Installation
-install(TARGETS vibe-player vibe-playlist DESTINATION bin)
-
 # CPack configuration for creating .deb packages
 set(CPACK_GENERATOR "DEB")
 set(CPACK_PACKAGE_NAME "vibe-player")
@@ -165,3 +109,7 @@ set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md")
 
 include(CPack)
+
+add_subdirectory(common)
+add_subdirectory(player)
+add_subdirectory(list)
