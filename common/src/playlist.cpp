@@ -1,3 +1,8 @@
+/*
+ * vibe-player
+ * playlist.cpp
+ */
+
 #include "playlist.h"
 #include <nlohmann/json.hpp>
 #include <fstream>

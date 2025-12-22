@@ -1,3 +1,8 @@
+/*
+ * vibe-player
+ * main.cpp
+ */
+
 #include "player.h"
 #include "metadata.h"
 #include "playlist.h"

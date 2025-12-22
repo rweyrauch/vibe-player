@@ -1,3 +1,8 @@
+/*
+ * vibe-player
+ * playlist.h
+ */
+
 #ifndef PLAYLIST_H
 #define PLAYLIST_H
 
