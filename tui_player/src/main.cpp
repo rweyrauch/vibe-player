@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -704,38 +705,21 @@ int main(int argc, char *argv[])
         // Read from stdin
         std::string content = readStdin();
 
-        // Auto-detect format
-        std::istringstream iss(content);
-        char first_char = '\0';
-        iss >> std::ws;
-        if (iss.peek() != EOF)
+        // Text format - parse paths
+        std::vector<std::string> paths;
+        std::istringstream stream(content);
+        std::string line;
+        while (std::getline(stream, line))
         {
-            first_char = iss.peek();
-        }
-
-        if (first_char == '{' || first_char == '[')
-        {
-            // JSON format
-            playlist_opt = Playlist::fromJson(content);
-        }
-        else
-        {
-            // Text format - parse paths
-            std::vector<std::string> paths;
-            std::istringstream stream(content);
-            std::string line;
-            while (std::getline(stream, line))
+            // Trim whitespace
+            line.erase(0, line.find_first_not_of(" \t\r\n"));
+            line.erase(line.find_last_not_of(" \t\r\n") + 1);
+            if (!line.empty() && line[0] != '#')
             {
-                // Trim whitespace
-                line.erase(0, line.find_first_not_of(" \t\r\n"));
-                line.erase(line.find_last_not_of(" \t\r\n") + 1);
-                if (!line.empty() && line[0] != '#')
-                {
-                    paths.push_back(line);
-                }
+                paths.push_back(line);
             }
-            playlist_opt = Playlist::fromPaths(paths);
         }
+        playlist_opt = Playlist::fromPaths(paths);
 
         if (!playlist_opt)
         {

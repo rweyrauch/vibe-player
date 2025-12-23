@@ -369,11 +369,7 @@ int main(int argc, char *argv[])
 
         // Determine format from extension or default to text
         PlaylistFormat format = PlaylistFormat::TEXT;
-        if (filename.ends_with(".json"))
-        {
-            format = PlaylistFormat::JSON;
-        }
-        else if (filename.ends_with(".m3u") || filename.ends_with(".m3u8"))
+        if (filename.ends_with(".m3u") || filename.ends_with(".m3u8"))
         {
             format = PlaylistFormat::M3U;
         }

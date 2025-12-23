@@ -13,7 +13,6 @@
 
 enum class PlaylistFormat {
     TEXT,
-    JSON,
     M3U,
     AUTO_DETECT
 };
@@ -21,14 +20,12 @@ enum class PlaylistFormat {
 class Playlist {
 public:
     // Construction
-    static std::optional<Playlist> fromJson(const std::string& json_content);
     static std::optional<Playlist> fromFile(const std::string& filepath);
     static std::optional<Playlist> fromTextFile(const std::string& filepath);
     static std::optional<Playlist> fromPaths(const std::vector<std::string>& paths, const std::string& base_path = "");
     static Playlist fromTracks(const std::vector<TrackMetadata>& tracks);
 
     // Serialization
-    std::string toJson() const;
     std::string toText() const;
     std::string toM3u() const;
     bool saveToFile(const std::string& filepath, PlaylistFormat format = PlaylistFormat::TEXT) const;
