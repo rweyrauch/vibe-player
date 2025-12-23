@@ -49,6 +49,19 @@ FetchContent_Declare(
     GIT_TAG v1.13.0
 )
 
+# Fetch notcurses library
+FetchContent_Declare(
+    notcurses
+    GIT_REPOSITORY https://github.com/dankamongmen/notcurses.git
+    GIT_TAG v3.0.11
+)
+set(USE_QRCODEGEN OFF CACHE BOOL "" FORCE)
+set(USE_PANDOC OFF CACHE BOOL "" FORCE)
+set(BUILD_FFI_LIBRARY OFF CACHE BOOL "" FORCE)
+set(BUILD_EXECUTABLES OFF CACHE BOOL "" FORCE)
+set(USE_MULTIMEDIA "ffmpeg" CACHE STRING "" FORCE)
+set(USE_DEFLATE OFF CACHE BOOL "" FORCE)
+
 # Fetch TagLib library
 FetchContent_Declare(
     taglib
@@ -77,7 +90,9 @@ set(LLAMA_NATIVE OFF CACHE BOOL "" FORCE)
 set(LLAMA_AVX2 ON CACHE BOOL "" FORCE)
 set(LLAMA_FMA ON CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib spdlog taglib llama)
+FetchContent_MakeAvailable(cxxopts miniaudio colors json httplib spdlog notcurses taglib llama)
+
+find_package(Threads REQUIRED)
 
 # Include directories
 include_directories(${miniaudio_SOURCE_DIR})
@@ -87,6 +102,7 @@ include_directories(${taglib_SOURCE_DIR}/taglib)
 include_directories(${taglib_SOURCE_DIR}/taglib/toolkit)
 include_directories(${taglib_SOURCE_DIR}/taglib/mpeg/id3v2)
 include_directories(${taglib_BINARY_DIR})
+include_directories(${notcurses_SOURCE_DIR}/include)
 
 # CPack configuration for creating .deb packages
 set(CPACK_GENERATOR "DEB")
@@ -113,3 +129,4 @@ include(CPack)
 add_subdirectory(common)
 add_subdirectory(player)
 add_subdirectory(list)
+add_subdirectory(tui_player)

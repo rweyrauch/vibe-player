@@ -127,13 +127,13 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
         std::cerr << options.help() << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 
     if (result.count("help"))
     {
         std::cout << options.help() << std::endl;
-        return 0;
+        return EXIT_SUCCESS;
     }
 
     const bool shuffle = result.count("shuffle") > 0;
@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
         {
             std::cerr << "Error: --library required with --prompt" << std::endl;
             std::cerr << options.help() << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         std::string library_path = result["library"].as<std::string>();
@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
         if (library_metadata.empty())
         {
             std::cerr << "Error: No audio files found in library" << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Create backend based on flag
@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
             {
                 std::cerr << "Error: ANTHROPIC_API_KEY environment variable not set" << std::endl;
                 std::cerr << "Set it with: export ANTHROPIC_API_KEY=your_key_here" << std::endl;
-                return 1;
+                return EXIT_FAILURE;
             }
 
             // Get model selection
@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
             {
                 std::cerr << "Error: --ai-model required for llamacpp backend" << std::endl;
                 std::cerr << "Example: --ai-model=/path/to/model.gguf" << std::endl;
-                return 1;
+                return EXIT_FAILURE;
             }
 
             std::string model_path = result["ai-model"].as<std::string>();
@@ -243,7 +243,7 @@ int main(int argc, char *argv[])
             {
                 std::cerr << "Error: OPENAI_API_KEY environment variable not set" << std::endl;
                 std::cerr << "Set it with: export OPENAI_API_KEY=your_key_here" << std::endl;
-                return 1;
+                return EXIT_FAILURE;
             }
 
             // Get model selection
@@ -272,7 +272,7 @@ int main(int argc, char *argv[])
         {
             std::cerr << "Error: Invalid AI backend '" << backend_type << "'" << std::endl;
             std::cerr << "Valid options: 'claude', 'chatgpt', 'llamacpp', or 'keyword'" << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Validate backend
@@ -280,7 +280,7 @@ int main(int argc, char *argv[])
         if (!backend->validate(error_msg))
         {
             std::cerr << "Error: " << error_msg << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Generate playlist
@@ -289,7 +289,7 @@ int main(int argc, char *argv[])
         if (!track_indices)
         {
             std::cerr << "Error: Failed to generate AI playlist" << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Convert indices to track metadata
@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
         if (playlist_tracks.empty())
         {
             std::cerr << "Error: AI generated empty playlist" << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         spdlog::info("Generated AI playlist with {} tracks", playlist_tracks.size());
@@ -321,7 +321,7 @@ int main(int argc, char *argv[])
         if (playlist_tracks.empty())
         {
             std::cerr << "No audio files found in directory: " << dir_path << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         spdlog::info("Found {} audio file(s) in directory", playlist_tracks.size());
@@ -340,14 +340,14 @@ int main(int argc, char *argv[])
         else
         {
             std::cerr << "Error: Failed to extract metadata from file: " << file_path << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
     }
     else
     {
         std::cerr << "Error: Please specify --directory, --file, or --prompt with --library" << std::endl;
         std::cerr << options.help() << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 
     // Apply shuffle if requested
@@ -385,7 +385,7 @@ int main(int argc, char *argv[])
         else
         {
             std::cerr << "Error: Failed to save playlist to file" << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
     }
     else
@@ -394,5 +394,5 @@ int main(int argc, char *argv[])
         std::cout << playlist.toText() << std::endl;
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }

@@ -17,7 +17,7 @@ target_link_libraries(vibe-playlist
     spdlog::spdlog
     tag
     llama
-    pthread
+    Threads::Threads
     m
     dl
     ssl

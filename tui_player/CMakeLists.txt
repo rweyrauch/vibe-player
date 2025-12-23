@@ -1,17 +1,18 @@
 # Player executable
-add_executable(vibe-player
+add_executable(tui-player
     src/main.cpp
 )
 
-target_link_libraries(vibe-player
+target_link_libraries(tui-player
     vibe-player-common
     cxxopts::cxxopts
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    notcurses
     tag
     Threads::Threads
     m
 )
 
 # Installation
-install(TARGETS vibe-player DESTINATION bin)
+install(TARGETS tui-player DESTINATION bin)

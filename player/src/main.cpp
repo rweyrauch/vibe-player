@@ -353,13 +353,13 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Error parsing options: " << e.what() << std::endl;
         std::cout << options.help() << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 
     if (result.count("help"))
     {
         std::cout << options.help() << std::endl;
-        return 0;
+        return EXIT_SUCCESS;
     }
 
     const bool repeat = result.count("repeat") > 0;
@@ -415,7 +415,7 @@ int main(int argc, char *argv[])
         if (!playlist_opt)
         {
             std::cerr << "Error: Failed to parse playlist from stdin" << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
 
         // Reopen stdin to /dev/tty for keyboard input in interactive mode
@@ -435,7 +435,7 @@ int main(int argc, char *argv[])
         if (!metadata)
         {
             std::cerr << "Error: Failed to extract metadata from file: " << filepath << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
         playlist_opt = Playlist::fromTracks({*metadata});
     }
@@ -447,14 +447,14 @@ int main(int argc, char *argv[])
         if (!playlist_opt)
         {
             std::cerr << "Error: Failed to load playlist from file: " << playlist_file << std::endl;
-            return 1;
+            return EXIT_FAILURE;
         }
     }
     else
     {
         std::cerr << "Error: Please specify a playlist file, --stdin, or --file" << std::endl;
         std::cout << options.help() << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 
     Playlist playlist = *playlist_opt;
@@ -465,7 +465,7 @@ int main(int argc, char *argv[])
     if (playlist.empty())
     {
         std::cerr << "Error: Playlist is empty" << std::endl;
-        return 1;
+        return EXIT_FAILURE;
     }
 
     AudioPlayer player;
@@ -478,7 +478,7 @@ int main(int argc, char *argv[])
     // Load first track
     if (!player.loadFile(playlist.current().filepath))
     {
-        return 1;
+        return EXIT_FAILURE;
     }
 
     std::cout << "\nVibe Player - " << playlist.size() << " track(s)";
@@ -541,5 +541,5 @@ int main(int argc, char *argv[])
 
     player.cleanup();
 
-    return 0;
+    return EXIT_SUCCESS;
 }
