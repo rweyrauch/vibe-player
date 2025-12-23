@@ -326,9 +326,13 @@ cat playlist.json | ./tui-player --stdin
 - Supports 256-color and true-color terminals
 - Album art looks best in terminals with good Unicode support
 
-## Playlist Format
+## Playlist Formats
 
-Playlists are JSON files with full track metadata:
+Vibe-player supports three playlist formats, each with different use cases:
+
+### 📋 JSON Format (Recommended for AI playlists)
+
+**Full metadata support** - The richest format with complete track information.
 
 ```json
 {
@@ -349,7 +353,121 @@ Playlists are JSON files with full track metadata:
 }
 ```
 
-This format allows the player to display rich metadata during playback.
+**Features:**
+- ✅ Full metadata (title, artist, album, genre, year, duration)
+- ✅ Best for AI-generated playlists
+- ✅ Enables rich display in players
+- ✅ Cached metadata for fast loading
+
+**Usage:**
+```bash
+# Generate JSON playlist (default for --save)
+./vibe-playlist --library ~/Music --prompt "jazz" --save jazz.json
+
+# Play JSON playlist
+./vibe-player jazz.json
+./tui-player jazz.json
+```
+
+### 📝 Text Format (Simple file lists)
+
+**Newline-separated file paths** - Simple and universal format.
+
+```
+/home/user/Music/song1.mp3
+/home/user/Music/song2.flac
+/home/user/Music/Jazz/track3.mp3
+```
+
+**Features:**
+- ✅ Simple and human-readable
+- ✅ One file path per line
+- ✅ Supports comments (lines starting with #)
+- ✅ Supports relative and absolute paths
+- ✅ Auto-extracted metadata on load (if available)
+
+**Usage:**
+```bash
+# Create text playlist manually
+echo "/path/to/song1.mp3" > playlist.txt
+echo "/path/to/song2.mp3" >> playlist.txt
+
+# Or use vibe-playlist
+./vibe-playlist --directory ~/Music --save playlist.txt
+
+# Play text playlist
+./vibe-player playlist.txt
+```
+
+**Example with comments:**
+```
+# My favorite rock songs
+/home/user/Music/Rock/song1.mp3
+/home/user/Music/Rock/song2.mp3
+
+# Some classics
+/home/user/Music/Classics/track.flac
+```
+
+### 🎵 M3U Format (Standard playlist format)
+
+**Extended M3U with metadata** - Compatible with most media players.
+
+```
+#EXTM3U
+#EXTINF:245,Artist Name - Song Title
+/absolute/path/to/song.mp3
+#EXTINF:312,Another Artist - Another Song
+/absolute/path/to/song2.flac
+```
+
+**Features:**
+- ✅ Standard format (compatible with VLC, Winamp, etc.)
+- ✅ Includes duration and display name
+- ✅ Extended M3U format (#EXTINF tags)
+- ✅ Portable across different players
+
+**Usage:**
+```bash
+# Generate M3U playlist
+./vibe-playlist --directory ~/Music --save playlist.m3u
+
+# Play M3U playlist
+./vibe-player playlist.m3u
+./tui-player playlist.m3u
+
+# Works with other players too
+vlc playlist.m3u
+```
+
+### Format Comparison
+
+| Feature | JSON | Text | M3U |
+| ------- | ---- | ---- | --- |
+| **Metadata** | Full metadata | None (extracted on load) | Duration + title |
+| **Compatibility** | vibe-player only | Universal text | Most media players |
+| **Human-readable** | Verbose | Very simple | Moderate |
+| **AI playlists** | ✅ Default | ❌ Not recommended | ✅ Supported |
+| **File size** | Larger | Smallest | Medium |
+| **Best for** | AI playlists, rich metadata | Simple lists, scripts | Cross-player compatibility |
+
+### Auto-Detection
+
+All players automatically detect the format:
+- Files starting with `{` or `[` → JSON
+- Files starting with `#EXTM3U` → M3U
+- Everything else → Text (newline-separated paths)
+
+**Examples:**
+```bash
+# All these work - format auto-detected
+./vibe-player my_playlist.json
+./vibe-player my_playlist.txt
+./vibe-player my_playlist.m3u
+
+# Even without proper extensions
+./vibe-player mylist  # Auto-detects based on content
+```
 
 ## 🎵 AI Playlist Generation
 
