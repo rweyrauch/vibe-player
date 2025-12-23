@@ -35,18 +35,11 @@
 #include <mp4/mp4coverart.h>
 
 volatile sig_atomic_t signal_received = 0;
-volatile sig_atomic_t window_resized = 0;
 struct notcurses* nc = nullptr;
 
 void SignalHandler(int signum)
 {
     signal_received = signum;
-}
-
-void ResizeHandler(int signum)
-{
-    (void)signum;
-    window_resized = 1;
 }
 
 void Cleanup()
@@ -262,6 +255,12 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
             struct ncplane* art_plane, struct ncvisual* album_art_visual,
             AudioPlayer &player, const Playlist &playlist, bool show_help)
 {
+    // If planes are null (terminal too small), skip drawing
+    if (!status_plane || !help_plane || !art_plane)
+    {
+        return;
+    }
+
     // Clear planes
     ncplane_erase(stdplane);
     ncplane_erase(status_plane);
@@ -775,7 +774,6 @@ int main(int argc, char *argv[])
     atexit(Cleanup);
     signal(SIGINT, SignalHandler);
     signal(SIGTERM, SignalHandler);
-    signal(SIGWINCH, ResizeHandler);
 
     // Load first track
     if (!player.loadFile(playlist.current().filepath))
@@ -843,35 +841,78 @@ int main(int argc, char *argv[])
         if (help_plane) ncplane_destroy(help_plane);
         if (art_plane) ncplane_destroy(art_plane);
 
+        // Reset to nullptr to avoid using stale pointers
+        status_plane = nullptr;
+        help_plane = nullptr;
+        art_plane = nullptr;
+
         // Get current dimensions
         unsigned int rows, cols;
         ncplane_dim_yx(stdplane, &rows, &cols);
 
+        // Minimum terminal size check
+        const unsigned int MIN_ROWS = 15;
+        const unsigned int MIN_COLS = 30;
+
+        if (rows < MIN_ROWS || cols < MIN_COLS)
+        {
+            spdlog::warn("Terminal too small ({}x{}), minimum is {}x{}", cols, rows, MIN_COLS, MIN_ROWS);
+            // Display error message on stdplane
+            ncplane_erase(stdplane);
+            ncplane_set_fg_rgb8(stdplane, 0xFF, 0x80, 0x80);
+            std::string error_msg = "Terminal too small!";
+            std::string min_msg = "Minimum: " + std::to_string(MIN_COLS) + "x" + std::to_string(MIN_ROWS);
+            if (rows >= 2 && cols >= error_msg.length())
+            {
+                ncplane_putstr_yx(stdplane, rows / 2, (cols - error_msg.length()) / 2, error_msg.c_str());
+            }
+            if (rows >= 3 && cols >= min_msg.length())
+            {
+                ncplane_putstr_yx(stdplane, rows / 2 + 1, (cols - min_msg.length()) / 2, min_msg.c_str());
+            }
+            notcurses_render(nc);
+            return;
+        }
+
         // Status plane (7 lines at bottom - 8)
         struct ncplane_options status_opts = {};
-        status_opts.y = rows - 8;
+        status_opts.y = rows >= 8 ? rows - 8 : 0;
         status_opts.x = 0;
-        status_opts.rows = 7;
+        status_opts.rows = std::min(7u, rows > 0 ? rows - 1 : 1);
         status_opts.cols = cols;
         status_plane = ncplane_create(stdplane, &status_opts);
+        if (!status_plane)
+        {
+            spdlog::error("Failed to create status plane");
+            return;
+        }
 
         // Album art plane (centered, larger size for better resolution)
         // Use up to 60 columns or 60% of terminal width, whichever is smaller
         int art_cols = std::min(60, static_cast<int>(cols * 0.6));
+        art_cols = std::max(10, art_cols); // Minimum 10 columns
+
         // Calculate rows to maintain roughly square aspect ratio (each char is ~2:1 height:width)
-        int art_rows = std::min(static_cast<int>(art_cols / 2), static_cast<int>(rows - 12));
+        int available_rows = static_cast<int>(rows) - 12;
+        int art_rows = std::min(static_cast<int>(art_cols / 2), available_rows);
+        art_rows = std::max(5, art_rows); // Minimum 5 rows
 
         struct ncplane_options art_opts = {};
         art_opts.y = 2;
-        art_opts.x = (cols - art_cols) / 2;  // Center the album art
+        art_opts.x = cols > static_cast<unsigned>(art_cols) ? (cols - art_cols) / 2 : 0;
         art_opts.rows = art_rows;
         art_opts.cols = art_cols;
         art_plane = ncplane_create(stdplane, &art_opts);
+        if (!art_plane)
+        {
+            spdlog::error("Failed to create art plane");
+            return;
+        }
 
         // Help plane (positioned to the right of album art, or below if narrow terminal)
         struct ncplane_options help_opts = {};
         int art_right_edge = art_opts.x + art_cols;
-        int space_on_right = cols - art_right_edge;
+        int space_on_right = static_cast<int>(cols) - art_right_edge;
 
         if (space_on_right > 35)
         {
@@ -879,17 +920,23 @@ int main(int argc, char *argv[])
             help_opts.y = 2;
             help_opts.x = art_right_edge + 2;
             help_opts.rows = art_rows;
-            help_opts.cols = space_on_right - 2;
+            help_opts.cols = std::max(10, space_on_right - 2);
         }
         else
         {
             // Not enough space on right - position below album art
             help_opts.y = art_opts.y + art_rows + 1;
-            help_opts.x = 2;
-            help_opts.rows = rows - help_opts.y - 9;
-            help_opts.cols = cols - 4;
+            help_opts.x = std::min(2u, cols > 4 ? 2u : 0u);
+            int help_rows = static_cast<int>(rows) - help_opts.y - 9;
+            help_opts.rows = std::max(3, help_rows);
+            help_opts.cols = std::max(10, static_cast<int>(cols) - 4);
         }
         help_plane = ncplane_create(stdplane, &help_opts);
+        if (!help_plane)
+        {
+            spdlog::error("Failed to create help plane");
+            return;
+        }
     };
 
     // Create initial planes
@@ -922,15 +969,24 @@ int main(int argc, char *argv[])
     player.play();
     was_playing = true;
 
+    // Track terminal dimensions for resize detection
+    unsigned int last_rows = 0, last_cols = 0;
+    ncplane_dim_yx(stdplane, &last_rows, &last_cols);
+
     while (running && !signal_received)
     {
-        // Handle window resize
-        if (window_resized)
+        // Check for terminal resize by comparing dimensions
+        unsigned int current_rows, current_cols;
+        ncplane_dim_yx(stdplane, &current_rows, &current_cols);
+
+        if (current_rows != last_rows || current_cols != last_cols)
         {
-            window_resized = 0;
-            notcurses_refresh(nc, nullptr, nullptr);
+            spdlog::debug("Terminal resized from {}x{} to {}x{}", last_cols, last_rows, current_cols, current_rows);
+            last_rows = current_rows;
+            last_cols = current_cols;
+
+            // Recreate planes with new dimensions
             createPlanes();
-            spdlog::debug("Terminal resized, recreated planes");
         }
 
         // Check if track changed and load new album art
