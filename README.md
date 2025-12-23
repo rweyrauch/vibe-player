@@ -1,5 +1,8 @@
 # Vibe Player - AI Music Player & Playlist Generator
 
+**Note: This app was vibe-coded with Claude, including this document.**
+**You have to love Claude's enthusiasm for documentation.**
+
 > **🎵 "upbeat workout songs" → Perfect 25-track playlist in 10 seconds**
 >
 > Stop manually building playlists. Just describe what you want to hear.
@@ -7,11 +10,12 @@
 **AI-powered music curation** meets Unix philosophy. A modular command-line audio toolset for Linux:
 
 - **vibe-playlist**: Generate playlists from directories, files, or **AI prompts** ✨
-- **vibe-player**: Play playlists with full interactive controls
+- **vibe-player**: Play playlists with full interactive controls (simple CLI)
+- **tui-player**: Beautiful terminal UI player with album art and rich display
 
 ```bash
-# Just describe what you want to hear
-./vibe-playlist --library ~/Music --prompt "upbeat workout music" | ./vibe-player --stdin
+# Just describe what you want to hear (with beautiful TUI and album art!)
+./vibe-playlist --library ~/Music --prompt "upbeat workout music" | ./tui-player --stdin
 ```
 
 ## Philosophy
@@ -62,11 +66,26 @@ This toolset is designed around separation of concerns:
 - Direct single-file playback
 - Support for WAV, MP3, FLAC, and OGG formats
 
+### tui-player (Terminal UI Player)
+
+**Enhanced visual music player with album art and rich terminal interface.**
+
+- 🎨 **Beautiful terminal UI** powered by notcurses
+- 🖼️ **Album art display** - Automatically extracts and displays cover art from MP3, FLAC, and M4A files
+- 📊 **Rich status display** - Centered layout with song, artist, album, playback state
+- 📈 **Visual progress bar** - See playback position at a glance
+- 🎯 **Responsive design** - Adapts to terminal size, handles resize gracefully
+- 🎨 **Sophisticated color scheme** - Easy-on-the-eyes non-primary colors
+- ⌨️ **Same controls as vibe-player** - Familiar keyboard shortcuts
+- 📦 **All vibe-player features** - Playlists, stdin, repeat mode, etc.
+- 🖥️ **Minimum terminal size** - 30 columns × 15 rows (shows helpful error if too small)
+
 ## Requirements
 
 - CMake 3.12 or higher
 - C++20 compatible compiler (g++, clang++)
 - Unix-like system (Linux, macOS, BSD)
+- **For tui-player**: FFmpeg libraries (libavformat, libavcodec, libavutil) for album art support
 
 **That's it!** No external libraries to install - CMake automatically fetches:
 
@@ -77,7 +96,20 @@ This toolset is designed around separation of concerns:
 - nlohmann/json (JSON handling)
 - cpp-httplib (HTTP client for Claude API)
 - spdlog (logging)
+- notcurses (terminal UI for tui-player)
 - llama.cpp (optional: local LLM inference)
+
+**Install FFmpeg (for tui-player album art):**
+```bash
+# Ubuntu/Debian
+sudo apt-get install libavformat-dev libavcodec-dev libavutil-dev
+
+# Fedora/RHEL
+sudo dnf install ffmpeg-devel
+
+# Arch Linux
+sudo pacman -S ffmpeg
+```
 
 ## Building
 
@@ -88,7 +120,10 @@ cmake ..
 make
 ```
 
-This creates two executables: `vibe-playlist` and `vibe-player`.
+This creates three executables:
+- `vibe-playlist` - Playlist generator
+- `vibe-player` - Simple CLI player
+- `tui-player` - Terminal UI player with album art
 
 ## Quick Start
 
@@ -101,7 +136,11 @@ This creates two executables: `vibe-playlist` and `vibe-player`.
 
 2. **Describe what you want to hear:**
    ```bash
+   # Simple CLI player
    ./vibe-playlist --library ~/Music --prompt "upbeat workout songs" | ./vibe-player --stdin
+
+   # Or use the beautiful TUI player with album art
+   ./vibe-playlist --library ~/Music --prompt "upbeat workout songs" | ./tui-player --stdin
    ```
 
 That's it! Claude will search your entire library and create a perfect playlist in seconds.
@@ -112,9 +151,13 @@ That's it! Claude will search your entire library and create a perfect playlist 
 # From a directory
 ./vibe-playlist --directory ~/Music/Jazz > jazz.json
 ./vibe-player jazz.json
+# or with TUI
+./tui-player jazz.json
 
 # Direct pipe
 ./vibe-playlist --directory ~/Music | ./vibe-player --stdin
+# or with TUI
+./vibe-playlist --directory ~/Music | ./tui-player --stdin
 ```
 
 ## Why AI Playlists?
@@ -172,14 +215,18 @@ That's it! Claude will search your entire library and create a perfect playlist 
 
 **AI-powered generation (see [AI Playlist Generation](#ai-playlist-generation)):**
 ```bash
-# Using Claude API
+# Using Claude API (default)
 ./vibe-playlist --library ~/Music --prompt "chill vibes for studying"
+
+# Using ChatGPT API
+./vibe-playlist --library ~/Music --prompt "chill vibes for studying" --ai-backend chatgpt
 
 # Save AI playlist
 ./vibe-playlist --library ~/Music --prompt "90s rock" --save rock90s.json
 
 # With model selection
 ./vibe-playlist --library ~/Music --prompt "jazz" --claude-model balanced
+./vibe-playlist --library ~/Music --prompt "jazz" --ai-backend chatgpt --chatgpt-model balanced
 ```
 
 **Options:**
@@ -187,6 +234,9 @@ That's it! Claude will search your entire library and create a perfect playlist 
 - `--file <path>` - Generate from single file
 - `--library <path>` - Music library for AI generation (required with --prompt)
 - `--prompt <text>` - AI playlist generation
+- `--ai-backend <type>` - AI backend: 'claude', 'chatgpt', 'llamacpp', or 'keyword' (default: claude)
+- `--claude-model <model>` - Claude model: 'fast', 'balanced', 'best' or full model ID (default: fast)
+- `--chatgpt-model <model>` - ChatGPT model: 'fast', 'balanced', 'best' or full model ID (default: fast)
 - `--shuffle` - Shuffle the playlist
 - `--save <file>` - Save to file (default: stdout)
 - `--force-scan` - Force metadata rescan (ignore cache)
@@ -225,6 +275,56 @@ cat playlist.json | ./vibe-player --stdin
 - `--file <path>` - Play single audio file
 - `--repeat` - Repeat playlist when finished
 - `--no-interactive` - Disable interactive controls
+
+### tui-player: Beautiful Terminal UI Player
+
+**All the same usage as vibe-player, but with a rich visual interface!**
+
+**From a file:**
+```bash
+./tui-player playlist.json
+```
+
+**From stdin (piped):**
+```bash
+cat playlist.json | ./tui-player --stdin
+./vibe-playlist --library ~/Music --prompt "chill vibes" | ./tui-player --stdin
+```
+
+**Direct file playback:**
+```bash
+./tui-player --file song.mp3
+```
+
+**With options:**
+```bash
+# Repeat mode
+./tui-player playlist.json --repeat
+
+# Non-interactive (minimal UI, no controls)
+./tui-player playlist.json --no-interactive
+```
+
+**Options:**
+- Same as vibe-player (100% compatible)
+- `<playlist_file>` - Playlist JSON file (positional)
+- `--stdin` - Read playlist from stdin
+- `--file <path>` - Play single audio file
+- `--repeat` - Repeat playlist when finished
+- `--no-interactive` - Disable interactive controls (shows minimal UI)
+
+**Features:**
+- 🎨 **Centered layout** - Album art, song info, and controls beautifully arranged
+- 🖼️ **Automatic album art** - Extracted from MP3 ID3v2, FLAC, and M4A/MP4 files
+- 📊 **Visual progress bar** - See exactly where you are in the track
+- 🎯 **Adaptive UI** - Automatically adjusts to terminal size and resize
+- ⌨️ **Help overlay** - Press `h` to show all keyboard shortcuts
+- 🖥️ **Graceful degradation** - Shows helpful message if terminal is too small
+
+**Tips:**
+- For best experience, use a terminal with at least 80 columns × 24 rows
+- Supports 256-color and true-color terminals
+- Album art looks best in terminals with good Unicode support
 
 ## Playlist Format
 
@@ -308,6 +408,65 @@ Generated AI playlist with 25 tracks
 - ✅ Fast (5-15 seconds)
 - ✅ Automatic metadata caching
 
+### 🤖 ChatGPT Backend (OpenAI API)
+
+**Alternative cloud-based AI** using OpenAI's ChatGPT with function calling. Like Claude, ChatGPT uses intelligent **full library search** to explore your entire music collection.
+
+**Setup:**
+
+```bash
+export OPENAI_API_KEY="your-openai-api-key"
+```
+
+Get your API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+**Usage:**
+
+```bash
+# Basic usage (fast model)
+./vibe-playlist --library ~/Music --prompt "upbeat workout songs" --ai-backend chatgpt
+
+# With model selection
+./vibe-playlist --library ~/Music --prompt "chill jazz" --ai-backend chatgpt --chatgpt-model balanced
+
+# Model options:
+#   fast     - GPT-4o Mini (fastest, cheapest)
+#   balanced - GPT-4o (recommended - good quality/speed balance)
+#   best     - GPT-4 (highest quality, most capable)
+
+# Save the playlist
+./vibe-playlist --library ~/Music --prompt "90s rock" --ai-backend chatgpt --save 90s.json
+```
+
+**How it works:**
+
+1. ChatGPT gets the same search tools: artist, genre, album, title, year
+2. Uses function calling to explore your music library strategically
+3. Searches your **entire library** (not just a sample!)
+4. Returns a curated playlist based on your prompt
+
+**Example:**
+```bash
+$ ./vibe-playlist --library ~/Music --prompt "energetic indie rock" --ai-backend chatgpt --chatgpt-model balanced
+Using cached metadata (7299 tracks)
+Generating AI playlist using function calling...
+ChatGPT is using functions to search the library...
+Generated AI playlist with 28 tracks
+```
+
+**Features:**
+- ✅ Searches entire library (no sampling)
+- ✅ Function calling for intelligent search
+- ✅ High-quality curation
+- ✅ Fast (5-15 seconds)
+- ✅ Automatic metadata caching
+- ✅ Alternative to Claude with different "taste"
+
+**When to use ChatGPT vs Claude:**
+- **ChatGPT**: If you already have OpenAI credits, prefer OpenAI's models, or want a different AI's "musical taste"
+- **Claude**: Generally more nuanced understanding, better reasoning about music context
+- Both work excellently - try both and see which you prefer!
+
 ### llama.cpp Backend (Offline/Local)
 
 Uses local LLM inference for completely offline playlist generation.
@@ -352,31 +511,37 @@ wget https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/
 - ✅ No API key needed
 - ⚠️  Samples library (up to 1000 tracks)
 
-### Comparison: Claude vs llama.cpp
+### Comparison: AI Backends
 
-| Feature | Claude ⭐ | llama.cpp |
-| ------- | -------- | --------- |
-| **Setup** | API key only | Download 1-5GB model |
-| **Cost** | ~$0.01 per playlist | Free |
-| **Speed** | ⚡ Fast (5-15s) | Slower (10-60s) |
-| **Quality** | 🏆 Excellent | Good |
-| **Library coverage** | 🔍 **Full library search** | ⚠️ Samples 1000 tracks |
-| **Intelligence** | 🧠 Advanced tool use | Basic inference |
-| **Offline** | No | ✅ Yes |
-| **Privacy** | Data sent to API | 🔒 Fully local |
+| Feature | Claude ⭐ | ChatGPT | llama.cpp |
+| ------- | -------- | ------- | --------- |
+| **Setup** | ANTHROPIC_API_KEY | OPENAI_API_KEY | Download 1-5GB model |
+| **Cost** | ~$0.01 per playlist | ~$0.01 per playlist | Free |
+| **Speed** | ⚡ Fast (5-15s) | ⚡ Fast (5-15s) | Slower (10-60s) |
+| **Quality** | 🏆 Excellent | 🏆 Excellent | Good |
+| **Library coverage** | 🔍 **Full library search** | 🔍 **Full library search** | ⚠️ Samples 1000 tracks |
+| **Intelligence** | 🧠 Advanced tool use | 🧠 Function calling | Basic inference |
+| **Offline** | No | No | ✅ Yes |
+| **Privacy** | Data sent to Anthropic | Data sent to OpenAI | 🔒 Fully local |
 
-**Why Claude is worth it:**
-- 💎 **Quality difference is massive** - Claude understands nuance and context
+**Why cloud AI (Claude/ChatGPT) is worth it:**
+- 💎 **Quality difference is massive** - Understands nuance and context
 - 🎯 **Searches your entire library** - No random sampling, finds the *perfect* tracks
 - ⚡ **10x faster** - Get results while your coffee is still hot
 - 💰 **Cheap** - ~1 cent per playlist (first playlists often free)
+
+**Claude vs ChatGPT:**
+- Both are excellent choices with similar capabilities
+- **Claude**: Generally more nuanced reasoning about music and context
+- **ChatGPT**: Great alternative if you prefer OpenAI or already have credits
+- Try both and use whichever gives you better results for your taste!
 
 **When to use llama.cpp:**
 - No internet connection
 - Privacy is critical (data never leaves your machine)
 - You have a powerful CPU and time to spare
 
-**Recommendation:** Start with Claude's `balanced` model - the quality difference will blow you away. Switch to llama.cpp only if you need offline capability.
+**Recommendation:** Start with Claude's `balanced` or ChatGPT's `balanced` model - the quality difference will blow you away. Switch to llama.cpp only if you need offline capability.
 
 ### ✨ Example Prompts - Get Creative!
 
@@ -469,6 +634,8 @@ The power of this design is in composition:
 
 ## Interactive Controls
 
+**Both vibe-player and tui-player use the same keyboard shortcuts.**
+
 While playing, use single-key commands (no Enter needed):
 
 | Key | Action |
@@ -482,22 +649,31 @@ While playing, use single-key commands (no Enter needed):
 | `f` or `→` | Forward 10 seconds |
 | `b` or `←` | Back 10 seconds |
 | `n` | Next track |
-| `h` | Show help |
+| `h` | Show help (tui-player shows overlay, vibe-player prints to stderr) |
 | `q` | Quit |
 
 ## Status Display
 
-The player shows a single updating status line with track metadata:
+### vibe-player (Simple CLI)
+
+Shows a single updating status line with track metadata:
 
 ```
 [Playing] Artist - Album - Song Title | 01:23 / 03:45 | Vol: 70% | Track 3/12
 ```
 
-- **State**: Playing, Paused, or Stopped
-- **Track info**: Artist - Album - Title (from metadata)
-- **Time**: Position / Duration
-- **Volume**: Current level (0-100%)
-- **Track number**: Position in playlist
+### tui-player (Terminal UI)
+
+Shows a rich visual interface with:
+- **Album art** - Cover art displayed in the center (if available)
+- **Centered song info** - Song, artist, album in beautiful typography
+- **Playback state** - Color-coded (mint green = playing, amber = paused, coral = stopped)
+- **Visual progress bar** - Filled bar showing playback position
+- **Time display** - Current position and total duration
+- **Volume and track info** - Current volume and track number
+- **Help overlay** - Press `h` to toggle keyboard shortcuts
+
+All information updates in real-time with sophisticated non-primary colors for easy viewing.
 
 ## Troubleshooting
 
@@ -509,6 +685,12 @@ export ANTHROPIC_API_KEY="your-key-here"
 # Add to ~/.bashrc or ~/.zshrc to make permanent
 ```
 
+**"OPENAI_API_KEY not set"**
+```bash
+export OPENAI_API_KEY="your-key-here"
+# Add to ~/.bashrc or ~/.zshrc to make permanent
+```
+
 **"Model file not found" (llama.cpp)**
 - Verify the model path: `--ai-model=/absolute/path/to/model.gguf`
 - Check file exists: `ls -lh ~/models/*.gguf`
@@ -516,6 +698,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 **Poor quality playlists**
 - Be more specific in your prompt
 - For Claude: try `--claude-model balanced` or `best`
+- For ChatGPT: try `--chatgpt-model balanced` or `best`
 - For llama.cpp: use a larger model (Mistral-7B or Llama-3-8B)
 - Ensure your music files have proper metadata tags
 
@@ -587,15 +770,21 @@ Logs include:
          └──────────┬──────────┘
                     │
                     ▼ JSON (stdout or file)
-         ┌──────────────────────┐
-         │   vibe-player        │
-         │  (Playback)          │
-         ├──────────────────────┤
-         │ • JSON parser        │
-         │ • Audio playback     │
-         │ • Interactive UI     │
-         │ • Playlist nav       │
-         └──────────────────────┘
+                    │
+         ┌──────────┴───────────┐
+         │                      │
+         ▼                      ▼
+┌──────────────────┐   ┌──────────────────────┐
+│   vibe-player    │   │    tui-player        │
+│  (Simple CLI)    │   │  (Terminal UI)       │
+├──────────────────┤   ├──────────────────────┤
+│ • JSON parser    │   │ • JSON parser        │
+│ • Audio playback │   │ • Audio playback     │
+│ • Status line    │   │ • Album art display  │
+│ • Keyboard UI    │   │ • Rich notcurses UI  │
+│ • Playlist nav   │   │ • Visual progress    │
+└──────────────────┘   │ • Responsive layout  │
+                       └──────────────────────┘
 ```
 
 **AI Backend Architecture:**
@@ -606,15 +795,20 @@ AIBackend (interface)
     │   ├── Tool use for library search
     │   └── Multi-turn conversations
     │
+    ├── ChatGPTBackend
+    │   ├── Function calling for library search
+    │   └── Multi-turn conversations
+    │
     └── LlamaCppBackend
         └── Local inference with llama.cpp
 
-LibrarySearch
+LibrarySearch (used by all backends)
     ├── searchByArtist()
     ├── searchByGenre()
     ├── searchByAlbum()
     ├── searchByTitle()
-    └── searchByYearRange()
+    ├── searchByYearRange()
+    └── getLibraryOverview()
 ```
 
 ## Design Goals
@@ -639,13 +833,15 @@ What this is NOT:
 ### Technologies
 
 - **Audio**: [miniaudio](https://github.com/mackron/miniaudio) (cross-platform audio playback)
-- **Metadata**: [TagLib](https://github.com/taglib/taglib) (ID3, Vorbis, etc.)
+- **Metadata**: [TagLib](https://github.com/taglib/taglib) (ID3, Vorbis, album art, etc.)
 - **JSON**: [nlohmann/json](https://github.com/nlohmann/json)
 - **HTTP**: [cpp-httplib](https://github.com/yhirose/cpp-httplib) (Claude API)
 - **Logging**: [spdlog](https://github.com/gabime/spdlog)
 - **Local LLM**: [llama.cpp](https://github.com/ggerganov/llama.cpp)
 - **CLI parsing**: [cxxopts](https://github.com/jarro2783/cxxopts)
-- **Terminal**: [colors](https://github.com/ShakaUVM/colors)
+- **Terminal**: [colors](https://github.com/ShakaUVM/colors) (vibe-player)
+- **Terminal UI**: [notcurses](https://github.com/dankamongmen/notcurses) (tui-player)
+- **Multimedia**: FFmpeg (for album art decoding in tui-player)
 - **Build**: CMake 3.12+ with FetchContent
 - **Language**: C++20
 
@@ -653,15 +849,21 @@ What this is NOT:
 
 ```
 vibe-player/
-├── src/
-│   ├── main_playlist_gen.cpp    # vibe-playlist application
-│   ├── main_player.cpp          # vibe-player application
-│   ├── playlist.{h,cpp}         # Playlist data structure
-│   ├── player.{h,cpp}           # Audio playback engine
-│   ├── metadata.{h,cpp}         # Metadata extraction
-│   ├── metadata_cache.{h,cpp}   # Persistent caching
-│   ├── ai_backend*.{h,cpp}      # AI backend implementations
-│   └── library_search.{h,cpp}   # Library search tools
+├── common/                      # Shared libraries
+│   ├── include/
+│   │   ├── metadata.h          # Metadata structures
+│   │   ├── metadata_cache.h    # Cache management
+│   │   ├── playlist.h          # Playlist data structure
+│   │   ├── player.h            # Audio playback engine
+│   │   ├── ai_backend*.h       # AI backend interfaces
+│   │   └── library_search.h    # Library search tools
+│   └── src/                    # Implementation files
+├── list/                        # vibe-playlist application
+│   └── src/main.cpp
+├── player/                      # vibe-player application (simple CLI)
+│   └── src/main.cpp
+├── tui_player/                  # tui-player application (terminal UI)
+│   └── src/main.cpp            # Rich TUI with notcurses & album art
 └── CMakeLists.txt               # Build configuration
 ```
 
@@ -677,6 +879,8 @@ This is intended to be a reference implementation showcasing Unix-style tool com
 
 Built with ❤️ using excellent open-source libraries. Special thanks to:
 - [miniaudio](https://github.com/mackron/miniaudio) for simple, portable audio
-- [TagLib](https://github.com/taglib/taglib) for comprehensive metadata support
+- [TagLib](https://github.com/taglib/taglib) for comprehensive metadata and album art support
+- [notcurses](https://github.com/dankamongmen/notcurses) for the beautiful terminal UI
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) for efficient local LLM inference
 - [Anthropic](https://anthropic.com) for the Claude API
+- FFmpeg community for multimedia codecs
