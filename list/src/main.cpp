@@ -31,7 +31,8 @@ void InitializeLogger(bool verbose)
     std::string home = std::getenv("HOME") ? std::getenv("HOME") : ".";
     fs::path log_dir = fs::path(home) / ".cache" / "vibe-playlist";
 
-    try {
+    try
+    {
         fs::create_directories(log_dir);
 
         // Create file logger
@@ -40,31 +41,37 @@ void InitializeLogger(bool verbose)
         spdlog::set_default_logger(logger);
 
         // Set log level based on verbose flag
-        if (verbose) {
+        if (verbose)
+        {
             spdlog::set_level(spdlog::level::debug);
             spdlog::info("Verbose logging enabled");
-        } else {
+        }
+        else
+        {
             spdlog::set_level(spdlog::level::info);
         }
 
         spdlog::info("Vibe Playlist Generator started");
         spdlog::info("Log file: {}", log_path.string());
-
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cerr << "Warning: Failed to initialize logger: " << e.what() << std::endl;
     }
 }
 
 std::vector<TrackMetadata> GetLibraryMetadata(
-    const std::string& library_path,
+    const std::string &library_path,
     bool force_rescan = false,
     bool verbose = false)
 {
     MetadataCache cache;
 
-    if (!force_rescan) {
+    if (!force_rescan)
+    {
         auto cached = cache.load(library_path);
-        if (cached && cache.isValid(library_path, *cached)) {
+        if (cached && cache.isValid(library_path, *cached))
+        {
             spdlog::info("Using cached metadata ({} tracks)", cached->size());
             return *cached;
         }
@@ -75,7 +82,8 @@ std::vector<TrackMetadata> GetLibraryMetadata(
 
     spdlog::info("Extracted metadata for {} tracks", metadata.size());
 
-    if (!cache.save(library_path, metadata)) {
+    if (!cache.save(library_path, metadata))
+    {
         spdlog::warn("Failed to save metadata cache");
     }
 
@@ -88,28 +96,24 @@ int main(int argc, char *argv[])
     cxxopts::Options options("vibe-playlist",
                              "Vibe Playlist Generator - Generate music playlists");
 
+    // clang-format off
     options.add_options()
         ("d,directory", "Generate playlist from directory", cxxopts::value<std::string>())
         ("f,file", "Generate playlist from single file", cxxopts::value<std::string>())
         ("l,library", "Music library path for AI playlist generation", cxxopts::value<std::string>())
         ("p,prompt", "Generate AI playlist from description", cxxopts::value<std::string>())
-        ("ai-backend", "AI backend: 'claude', 'chatgpt', 'llamacpp', or 'keyword' (default: claude)",
-            cxxopts::value<std::string>()->default_value("claude"))
-        ("claude-model", "Claude model preset: 'fast' (Haiku), 'balanced' (Sonnet), 'best' (Opus) or full model ID (default: fast)",
-            cxxopts::value<std::string>()->default_value("fast"))
-        ("chatgpt-model", "ChatGPT model preset: 'fast' (GPT-4o Mini), 'balanced' (GPT-4o), 'best' (GPT-4) or full model ID (default: fast)",
-            cxxopts::value<std::string>()->default_value("fast"))
-        ("ai-model", "Path to GGUF model file (required for llamacpp backend)",
-            cxxopts::value<std::string>())
-        ("ai-context-size", "Context size for llama.cpp (default: 2048)",
-            cxxopts::value<int>()->default_value("2048"))
-        ("ai-threads", "Number of threads for llama.cpp (default: 4)",
-            cxxopts::value<int>()->default_value("4"))
+        ("ai-backend", "AI backend: 'claude', 'chatgpt', 'llamacpp', or 'keyword' (default: claude)", cxxopts::value<std::string>()->default_value("claude"))
+        ("claude-model", "Claude model preset: 'fast' (Haiku), 'balanced' (Sonnet), 'best' (Opus) or full model ID (default: fast)", cxxopts::value<std::string>()->default_value("fast"))
+        ("chatgpt-model", "ChatGPT model preset: 'fast' (GPT-4o Mini), 'balanced' (GPT-4o), 'best' (GPT-4) or full model ID (default: fast)", cxxopts::value<std::string>()->default_value("fast"))
+        ("ai-model", "Path to GGUF model file (required for llamacpp backend)", cxxopts::value<std::string>())
+        ("ai-context-size", "Context size for llama.cpp (default: 2048)", cxxopts::value<int>()->default_value("2048"))
+        ("ai-threads", "Number of threads for llama.cpp (default: 4)", cxxopts::value<int>()->default_value("4"))
         ("force-scan", "Force rescan library metadata (ignore cache)")
         ("verbose", "Display AI prompts and debug information")
         ("s,shuffle", "Shuffle playlist")
         ("save", "Save playlist to file (default: output to stdout)", cxxopts::value<std::string>())
         ("h,help", "Print usage");
+    // clang-format on
 
     options.parse_positional({"file"});
     options.positional_help("<audio_file>");
@@ -169,10 +173,12 @@ int main(int argc, char *argv[])
         std::unique_ptr<AIBackend> backend;
         StreamCallback stream_cb = nullptr;
 
-        if (backend_type == "claude") {
+        if (backend_type == "claude")
+        {
             // Check for API key
-            const char* api_key = std::getenv("ANTHROPIC_API_KEY");
-            if (!api_key || strlen(api_key) == 0) {
+            const char *api_key = std::getenv("ANTHROPIC_API_KEY");
+            if (!api_key || strlen(api_key) == 0)
+            {
                 std::cerr << "Error: ANTHROPIC_API_KEY environment variable not set" << std::endl;
                 std::cerr << "Set it with: export ANTHROPIC_API_KEY=your_key_here" << std::endl;
                 return 1;
@@ -184,17 +190,22 @@ int main(int argc, char *argv[])
             // Check if it's a preset or a full model ID
             if (model_selection == "fast" || model_selection == "balanced" ||
                 model_selection == "best" || model_selection == "haiku" ||
-                model_selection == "sonnet" || model_selection == "opus") {
+                model_selection == "sonnet" || model_selection == "opus")
+            {
                 ClaudeModel model = ClaudeBackend::parseModelPreset(model_selection);
                 backend = std::make_unique<ClaudeBackend>(api_key, model);
-            } else {
+            }
+            else
+            {
                 // Use as full model ID
                 backend = std::make_unique<ClaudeBackend>(api_key, model_selection);
             }
-
-        } else if (backend_type == "llamacpp") {
+        }
+        else if (backend_type == "llamacpp")
+        {
             // Check for model path
-            if (!result.count("ai-model")) {
+            if (!result.count("ai-model"))
+            {
                 std::cerr << "Error: --ai-model required for llamacpp backend" << std::endl;
                 std::cerr << "Example: --ai-model=/path/to/model.gguf" << std::endl;
                 return 1;
@@ -210,20 +221,26 @@ int main(int argc, char *argv[])
             llamacpp_backend->setConfig(config);
 
             // Setup streaming callback for progress
-            stream_cb = [](const std::string& chunk, bool is_final) {
-                if (!is_final) {
+            stream_cb = [](const std::string &chunk, bool is_final)
+            {
+                if (!is_final)
+                {
                     spdlog::debug(chunk);
-                } else {
+                }
+                else
+                {
                     spdlog::debug("\n");
                 }
             };
 
             backend = std::move(llamacpp_backend);
-
-        } else if (backend_type == "chatgpt") {
+        }
+        else if (backend_type == "chatgpt")
+        {
             // Check for API key
-            const char* api_key = std::getenv("OPENAI_API_KEY");
-            if (!api_key || strlen(api_key) == 0) {
+            const char *api_key = std::getenv("OPENAI_API_KEY");
+            if (!api_key || strlen(api_key) == 0)
+            {
                 std::cerr << "Error: OPENAI_API_KEY environment variable not set" << std::endl;
                 std::cerr << "Set it with: export OPENAI_API_KEY=your_key_here" << std::endl;
                 return 1;
@@ -235,19 +252,24 @@ int main(int argc, char *argv[])
             // Check if it's a preset or a full model ID
             if (model_selection == "fast" || model_selection == "balanced" ||
                 model_selection == "best" || model_selection == "mini" ||
-                model_selection == "gpt-4o" || model_selection == "gpt-4") {
+                model_selection == "gpt-4o" || model_selection == "gpt-4")
+            {
                 ChatGPTModel model = ChatGPTBackend::parseModelPreset(model_selection);
                 backend = std::make_unique<ChatGPTBackend>(api_key, model);
-            } else {
+            }
+            else
+            {
                 // Use as full model ID
                 backend = std::make_unique<ChatGPTBackend>(api_key, model_selection);
             }
-
-        } else if (backend_type == "keyword") {
+        }
+        else if (backend_type == "keyword")
+        {
             // Keyword matching backend - no configuration needed
             backend = std::make_unique<KeywordBackend>();
-
-        } else {
+        }
+        else
+        {
             std::cerr << "Error: Invalid AI backend '" << backend_type << "'" << std::endl;
             std::cerr << "Valid options: 'claude', 'chatgpt', 'llamacpp', or 'keyword'" << std::endl;
             return 1;
@@ -255,7 +277,8 @@ int main(int argc, char *argv[])
 
         // Validate backend
         std::string error_msg;
-        if (!backend->validate(error_msg)) {
+        if (!backend->validate(error_msg))
+        {
             std::cerr << "Error: " << error_msg << std::endl;
             return 1;
         }
@@ -270,7 +293,7 @@ int main(int argc, char *argv[])
         }
 
         // Convert indices to track metadata
-        for (const auto& idx_str : *track_indices)
+        for (const auto &idx_str : *track_indices)
         {
             size_t idx = std::stoull(idx_str);
             if (idx < library_metadata.size())
@@ -310,9 +333,12 @@ int main(int argc, char *argv[])
 
         // Extract metadata for the single file
         auto metadata = MetadataExtractor::extract(file_path, verbose);
-        if (metadata) {
+        if (metadata)
+        {
             playlist_tracks.push_back(*metadata);
-        } else {
+        }
+        else
+        {
             std::cerr << "Error: Failed to extract metadata from file: " << file_path << std::endl;
             return 1;
         }
@@ -337,24 +363,33 @@ int main(int argc, char *argv[])
     Playlist playlist = Playlist::fromTracks(playlist_tracks);
 
     // Output playlist
-    if (save_to_file) {
+    if (save_to_file)
+    {
         std::string filename = result["save"].as<std::string>();
 
         // Determine format from extension or default to text
         PlaylistFormat format = PlaylistFormat::TEXT;
-        if (filename.ends_with(".json")) {
+        if (filename.ends_with(".json"))
+        {
             format = PlaylistFormat::JSON;
-        } else if (filename.ends_with(".m3u") || filename.ends_with(".m3u8")) {
+        }
+        else if (filename.ends_with(".m3u") || filename.ends_with(".m3u8"))
+        {
             format = PlaylistFormat::M3U;
         }
 
-        if (playlist.saveToFile(filename, format)) {
+        if (playlist.saveToFile(filename, format))
+        {
             spdlog::info("Playlist saved to: {}", filename);
-        } else {
+        }
+        else
+        {
             std::cerr << "Error: Failed to save playlist to file" << std::endl;
             return 1;
         }
-    } else {
+    }
+    else
+    {
         // Output to stdout as text (just paths)
         std::cout << playlist.toText() << std::endl;
     }

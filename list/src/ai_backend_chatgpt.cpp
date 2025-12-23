@@ -16,36 +16,46 @@
 
 using json = nlohmann::json;
 
-ChatGPTBackend::ChatGPTBackend(const std::string& api_key, ChatGPTModel model)
-    : api_key_(api_key), model_(getModelId(model)) {
+ChatGPTBackend::ChatGPTBackend(const std::string &api_key, ChatGPTModel model)
+    : api_key_(api_key), model_(getModelId(model))
+{
 }
 
-ChatGPTBackend::ChatGPTBackend(const std::string& api_key, const std::string& model_id)
-    : api_key_(api_key), model_(model_id) {
+ChatGPTBackend::ChatGPTBackend(const std::string &api_key, const std::string &model_id)
+    : api_key_(api_key), model_(model_id)
+{
 }
 
-std::string ChatGPTBackend::getModelId(ChatGPTModel model) {
-    switch (model) {
-        case ChatGPTModel::FAST:
-            return "gpt-4o-mini";
-        case ChatGPTModel::BALANCED:
-            return "gpt-4o";
-        case ChatGPTModel::BEST:
-            return "gpt-4";
-        default:
-            return "gpt-4o-mini";
+std::string ChatGPTBackend::getModelId(ChatGPTModel model)
+{
+    switch (model)
+    {
+    case ChatGPTModel::FAST:
+        return "gpt-4o-mini";
+    case ChatGPTModel::BALANCED:
+        return "gpt-4o";
+    case ChatGPTModel::BEST:
+        return "gpt-4";
+    default:
+        return "gpt-4o-mini";
     }
 }
 
-ChatGPTModel ChatGPTBackend::parseModelPreset(const std::string& preset) {
+ChatGPTModel ChatGPTBackend::parseModelPreset(const std::string &preset)
+{
     std::string lower = preset;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
-    if (lower == "fast" || lower == "mini" || lower == "gpt-4o-mini") {
+    if (lower == "fast" || lower == "mini" || lower == "gpt-4o-mini")
+    {
         return ChatGPTModel::FAST;
-    } else if (lower == "balanced" || lower == "gpt-4o") {
+    }
+    else if (lower == "balanced" || lower == "gpt-4o")
+    {
         return ChatGPTModel::BALANCED;
-    } else if (lower == "best" || lower == "gpt-4") {
+    }
+    else if (lower == "best" || lower == "gpt-4")
+    {
         return ChatGPTModel::BEST;
     }
 
@@ -53,15 +63,19 @@ ChatGPTModel ChatGPTBackend::parseModelPreset(const std::string& preset) {
     return ChatGPTModel::FAST;
 }
 
-bool ChatGPTBackend::validate(std::string& error_message) const {
-    if (api_key_.empty()) {
+bool ChatGPTBackend::validate(std::string &error_message) const
+{
+    if (api_key_.empty())
+    {
         error_message = "OPENAI_API_KEY not set. Get a key from https://platform.openai.com/api-keys";
         return false;
     }
     return true;
 }
 
-json ChatGPTBackend::buildToolDefinitions() const {
+// clang-format off
+json ChatGPTBackend::buildToolDefinitions() const 
+{
     return json::array({
         {
             {"type", "function"},
@@ -192,15 +206,18 @@ json ChatGPTBackend::buildToolDefinitions() const {
         }
     });
 }
+// clang-format on
 
 json ChatGPTBackend::executeToolCall(
-    const std::string& function_name,
-    const json& arguments,
-    const LibrarySearch& search_engine) const {
+    const std::string &function_name,
+    const json &arguments,
+    const LibrarySearch &search_engine) const
+{
 
     spdlog::debug("Executing function: {} with arguments: {}", function_name, arguments.dump());
 
-    if (function_name == "search_by_artist") {
+    if (function_name == "search_by_artist")
+    {
         std::string artist = arguments["artist_name"];
         int max_results = arguments.value("max_results", 100);
 
@@ -209,10 +226,10 @@ json ChatGPTBackend::executeToolCall(
         return {
             {"found", result.track_indices.size()},
             {"total_matches", result.total_matches},
-            {"indices", result.track_indices}
-        };
-
-    } else if (function_name == "search_by_genre") {
+            {"indices", result.track_indices}};
+    }
+    else if (function_name == "search_by_genre")
+    {
         std::string genre = arguments["genre"];
         int max_results = arguments.value("max_results", 100);
 
@@ -221,10 +238,10 @@ json ChatGPTBackend::executeToolCall(
         return {
             {"found", result.track_indices.size()},
             {"total_matches", result.total_matches},
-            {"indices", result.track_indices}
-        };
-
-    } else if (function_name == "search_by_album") {
+            {"indices", result.track_indices}};
+    }
+    else if (function_name == "search_by_album")
+    {
         std::string album = arguments["album_name"];
         int max_results = arguments.value("max_results", 100);
 
@@ -233,10 +250,10 @@ json ChatGPTBackend::executeToolCall(
         return {
             {"found", result.track_indices.size()},
             {"total_matches", result.total_matches},
-            {"indices", result.track_indices}
-        };
-
-    } else if (function_name == "search_by_title") {
+            {"indices", result.track_indices}};
+    }
+    else if (function_name == "search_by_title")
+    {
         std::string title = arguments["title"];
         int max_results = arguments.value("max_results", 100);
 
@@ -245,10 +262,10 @@ json ChatGPTBackend::executeToolCall(
         return {
             {"found", result.track_indices.size()},
             {"total_matches", result.total_matches},
-            {"indices", result.track_indices}
-        };
-
-    } else if (function_name == "search_by_year_range") {
+            {"indices", result.track_indices}};
+    }
+    else if (function_name == "search_by_year_range")
+    {
         int start_year = arguments["start_year"];
         int end_year = arguments["end_year"];
         int max_results = arguments.value("max_results", 100);
@@ -258,21 +275,23 @@ json ChatGPTBackend::executeToolCall(
         return {
             {"found", result.track_indices.size()},
             {"total_matches", result.total_matches},
-            {"indices", result.track_indices}
-        };
-
-    } else if (function_name == "get_library_overview") {
+            {"indices", result.track_indices}};
+    }
+    else if (function_name == "get_library_overview")
+    {
         auto artists = search_engine.getUniqueArtists();
         auto genres = search_engine.getUniqueGenres();
         auto albums = search_engine.getUniqueAlbums();
 
         json sample_artists = json::array();
-        for (size_t i = 0; i < std::min(size_t(20), artists.size()); i++) {
+        for (size_t i = 0; i < std::min(size_t(20), artists.size()); i++)
+        {
             sample_artists.push_back(artists[i]);
         }
 
         json sample_genres = json::array();
-        for (size_t i = 0; i < std::min(size_t(20), genres.size()); i++) {
+        for (size_t i = 0; i < std::min(size_t(20), genres.size()); i++)
+        {
             sample_genres.push_back(genres[i]);
         }
 
@@ -291,12 +310,14 @@ json ChatGPTBackend::executeToolCall(
 }
 
 std::optional<std::vector<std::string>> ChatGPTBackend::generate(
-    const std::string& user_prompt,
-    const std::vector<TrackMetadata>& library_metadata,
+    const std::string &user_prompt,
+    const std::vector<TrackMetadata> &library_metadata,
     StreamCallback stream_callback,
-    bool verbose) {
+    bool verbose)
+{
 
-    if (library_metadata.empty()) {
+    if (library_metadata.empty())
+    {
         std::cerr << "Error: No tracks in library" << std::endl;
         spdlog::error("Error: No tracks in library");
         return std::nullopt;
@@ -311,12 +332,11 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
     // Create HTTPS client
     httplib::SSLClient client(API_ENDPOINT);
     client.set_connection_timeout(30, 0);
-    client.set_read_timeout(90, 0);  // Longer timeout for function calling
+    client.set_read_timeout(90, 0); // Longer timeout for function calling
 
     // Set headers
     httplib::Headers headers = {
-        {"Authorization", "Bearer " + api_key_}
-    };
+        {"Authorization", "Bearer " + api_key_}};
 
     // Build initial prompt
     std::ostringstream initial_prompt;
@@ -333,16 +353,15 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
 
     // Initialize conversation
     json::array_t messages;
-    messages.push_back({
-        {"role", "user"},
-        {"content", initial_prompt.str()}
-    });
+    messages.push_back({{"role", "user"},
+                        {"content", initial_prompt.str()}});
 
     spdlog::debug("Generating AI playlist using function calling...");
 
     // Function calling loop
     const int MAX_TURNS = 10;
-    for (int turn = 0; turn < MAX_TURNS; turn++) {
+    for (int turn = 0; turn < MAX_TURNS; turn++)
+    {
         spdlog::debug("Function calling turn {}/{}", turn + 1, MAX_TURNS);
 
         // Build request with tools
@@ -350,22 +369,26 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
             {"model", model_},
             {"messages", messages},
             {"tools", buildToolDefinitions()},
-            {"tool_choice", "auto"}
-        };
+            {"tool_choice", "auto"}};
 
         spdlog::debug("Sending request to OpenAI API");
         auto response = client.Post("/v1/chat/completions", headers,
-                                   request_body.dump(), "application/json");
+                                    request_body.dump(), "application/json");
 
-        if (!response || response->status != 200) {
-            if (response) {
+        if (!response || response->status != 200)
+        {
+            if (response)
+            {
                 spdlog::error("OpenAI API returned status {}", response->status);
                 std::cerr << "Error: OpenAI API returned status " << response->status << std::endl;
-                if (response->status >= 400) {
+                if (response->status >= 400)
+                {
                     spdlog::debug("Error response: {}", response->body);
                     std::cerr << "Response: " << response->body << std::endl;
                 }
-            } else {
+            }
+            else
+            {
                 spdlog::error("Failed to connect to OpenAI API");
                 std::cerr << "Error: Failed to connect to OpenAI API" << std::endl;
             }
@@ -374,9 +397,12 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
 
         // Parse response
         json response_json;
-        try {
+        try
+        {
             response_json = json::parse(response->body);
-        } catch (const std::exception& e) {
+        }
+        catch (const std::exception &e)
+        {
             spdlog::error("Failed to parse API response: {}", e.what());
             std::cerr << "Error parsing API response: " << e.what() << std::endl;
             return std::nullopt;
@@ -385,7 +411,8 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
         spdlog::debug("Response: {}", response_json.dump(2));
 
         // Get the message from the response
-        if (!response_json.contains("choices") || response_json["choices"].empty()) {
+        if (!response_json.contains("choices") || response_json["choices"].empty())
+        {
             spdlog::error("No choices in API response");
             std::cerr << "Error: Invalid API response format" << std::endl;
             return std::nullopt;
@@ -397,18 +424,23 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
         messages.push_back(message);
 
         // Check if there are tool calls
-        if (message.contains("tool_calls") && !message["tool_calls"].is_null()) {
+        if (message.contains("tool_calls") && !message["tool_calls"].is_null())
+        {
             spdlog::info("ChatGPT is using functions to search the library...");
 
             // Process all function calls
-            for (const auto& tool_call : message["tool_calls"]) {
+            for (const auto &tool_call : message["tool_calls"])
+            {
                 std::string function_name = tool_call["function"]["name"];
                 std::string tool_call_id = tool_call["id"];
 
                 json arguments;
-                try {
+                try
+                {
                     arguments = json::parse(tool_call["function"]["arguments"].get<std::string>());
-                } catch (const std::exception& e) {
+                }
+                catch (const std::exception &e)
+                {
                     spdlog::error("Failed to parse function arguments: {}", e.what());
                     continue;
                 }
@@ -419,48 +451,57 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
                 json result = executeToolCall(function_name, arguments, search_engine);
 
                 // Add function result to conversation
-                messages.push_back({
-                    {"role", "tool"},
-                    {"tool_call_id", tool_call_id},
-                    {"content", result.dump()}
-                });
+                messages.push_back({{"role", "tool"},
+                                    {"tool_call_id", tool_call_id},
+                                    {"content", result.dump()}});
             }
 
-            continue;  // Continue the loop
-
-        } else {
+            continue; // Continue the loop
+        }
+        else
+        {
             // No tool calls - this should be the final answer
-            if (message.contains("content") && !message["content"].is_null()) {
+            if (message.contains("content") && !message["content"].is_null())
+            {
                 std::string content = message["content"];
                 spdlog::debug("Final response text: {}", content);
 
                 // Parse JSON array of indices
-                try {
+                try
+                {
                     size_t start = content.find('[');
                     size_t end = content.rfind(']');
 
-                    if (start != std::string::npos && end != std::string::npos && start < end) {
+                    if (start != std::string::npos && end != std::string::npos && start < end)
+                    {
                         std::string json_array_str = content.substr(start, end - start + 1);
                         json indices_array = json::parse(json_array_str);
 
-                        if (indices_array.is_array() && !indices_array.empty()) {
+                        if (indices_array.is_array() && !indices_array.empty())
+                        {
                             std::vector<std::string> playlist;
-                            for (const auto& idx : indices_array) {
-                                if (idx.is_number_integer()) {
+                            for (const auto &idx : indices_array)
+                            {
+                                if (idx.is_number_integer())
+                                {
                                     size_t track_idx = idx.get<size_t>();
-                                    if (track_idx < library_metadata.size()) {
+                                    if (track_idx < library_metadata.size())
+                                    {
                                         playlist.push_back(std::to_string(track_idx));
                                     }
                                 }
                             }
 
-                            if (!playlist.empty()) {
+                            if (!playlist.empty())
+                            {
                                 spdlog::info("Successfully generated playlist with {} tracks", playlist.size());
                                 return playlist;
                             }
                         }
                     }
-                } catch (const std::exception& e) {
+                }
+                catch (const std::exception &e)
+                {
                     spdlog::error("Failed to parse playlist indices: {}", e.what());
                 }
             }

@@ -38,51 +38,61 @@ void Cleanup()
 void PrintHelp()
 {
     std::cout << "\nCommands:\n"
-              << "  p - Play\n"
-              << "  s - Stop\n"
-              << "  u - Pause\n"
-              << "  + - Volume up\n"
-              << "  - - Volume down\n"
-              << "  f - Forward 10s\n"
-              << "  b - Back 10s\n"
-              << "  n - Next track\n"
-              << "  h - Help\n"
-              << "  q - Quit\n"
+              << "space - Play/Pause\n"
+              << "  s   - Stop\n"
+              << "  u   - Pause\n"
+              << "  +   - Volume up\n"
+              << "  -   - Volume down\n"
+              << "  f   - Forward 10s\n"
+              << "right - Forward 10s\n"
+              << "  b   - Back 10s\n"
+              << " left - Back 10s\n"
+              << "  n   - Next track\n"
+              << "  p   - Previous track\n"
+              << "  h   - Help\n"
+              << "  q  - Quit\n"
               << std::endl;
 }
 
-std::string TruncateString(const std::string& str, size_t maxLength) {
+std::string TruncateString(const std::string &str, size_t maxLength)
+{
     // If the string is already short enough, return it as-is
-    if (str.length() <= maxLength) {
+    if (str.length() <= maxLength)
+    {
         return str;
     }
-    
+
     // If maxLength is too small to include ellipsis, just return the truncated string
-    if (maxLength < 3) {
+    if (maxLength < 3)
+    {
         return str.substr(0, maxLength);
     }
-    
+
     // Truncate and append ellipsis
     return str.substr(0, maxLength - 3) + "...";
 }
 
-std::string FixFieldString(const std::string& str, size_t maxLength, char padChar = ' ') {
+std::string FixFieldString(const std::string &str, size_t maxLength, char padChar = ' ')
+{
     // If the string is longer than maxLength, truncate it
-    if (str.length() > maxLength) {
+    if (str.length() > maxLength)
+    {
         // If maxLength is too small to include ellipsis, just return the truncated string
-        if (maxLength < 3) {
+        if (maxLength < 3)
+        {
             return str.substr(0, maxLength);
         }
-        
+
         // Truncate and append ellipsis
         return str.substr(0, maxLength - 3) + "...";
     }
-    
+
     // If the string is shorter than maxLength, pad it
-    if (str.length() < maxLength) {
+    if (str.length() < maxLength)
+    {
         return str + std::string(maxLength - str.length(), padChar);
     }
-    
+
     // If the string is exactly maxLength, return it as-is
     return str;
 }
@@ -95,7 +105,8 @@ void InitializeLogger(bool verbose)
     std::string home = std::getenv("HOME") ? std::getenv("HOME") : ".";
     fs::path log_dir = fs::path(home) / ".cache" / "vibe-player";
 
-    try {
+    try
+    {
         fs::create_directories(log_dir);
 
         // Create file logger
@@ -104,17 +115,21 @@ void InitializeLogger(bool verbose)
         spdlog::set_default_logger(logger);
 
         // Set log level based on verbose flag
-        if (verbose) {
+        if (verbose)
+        {
             spdlog::set_level(spdlog::level::debug);
             spdlog::info("Verbose logging enabled");
-        } else {
+        }
+        else
+        {
             spdlog::set_level(spdlog::level::info);
         }
 
         spdlog::info("Vibe Player started");
         spdlog::info("Log file: {}", log_path.string());
-
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cerr << "Warning: Failed to initialize logger: " << e.what() << std::endl;
     }
 }
@@ -127,48 +142,56 @@ void PrintStatus(AudioPlayer &player, const Playlist &playlist)
 
     std::string state;
     std::string state_color;
-    if (player.isPlaying()) {
+    if (player.isPlaying())
+    {
         state = "Playing";
         state_color = BOLDGREEN;
     }
-    else if (player.isPaused()) {
+    else if (player.isPaused())
+    {
         state = "Paused ";
         state_color = BOLDYELLOW;
     }
-    else {
+    else
+    {
         state = "Stopped";
         state_color = BOLDRED;
     }
 
-    const TrackMetadata& track = playlist.current();
+    const TrackMetadata &track = playlist.current();
 
     // Print state with color
     std::cout << "\r[" << state_color << state << RESET << "] ";
 
     // Print artist in  bold cyan
-    if (track.artist) {
+    if (track.artist)
+    {
         std::cout << BOLDCYAN << FixFieldString(*track.artist, 15) << RESET << " - ";
     }
 
     // Print album in cyan
-    if (track.album) {
+    if (track.album)
+    {
         std::cout << CYAN << FixFieldString(*track.album, 15) << RESET << " - ";
     }
 
     // Print title/filename in bold white
-    if (track.title) {
+    if (track.title)
+    {
         std::cout << BOLDWHITE << FixFieldString(*track.title, 30) << RESET;
-    } else {
+    }
+    else
+    {
         std::cout << BOLDWHITE << FixFieldString(track.filename, 30) << RESET;
     }
 
     // Print time in green
     std::cout << "|" << GREEN
               << std::setfill('0') << std::setw(2) << (pos / 60000) << ":"
-              << std::setw(2) << ((pos/1000) % 60) << RESET
+              << std::setw(2) << ((pos / 1000) % 60) << RESET
               << "/" << GREEN
-              << std::setw(2) << ((dur/1000) / 60) << ":"
-              << std::setw(2) << ((dur/1000) % 60) << RESET;
+              << std::setw(2) << ((dur / 1000) / 60) << ":"
+              << std::setw(2) << ((dur / 1000) % 60) << RESET;
 
     // Print volume in magenta
     std::cout << "|Vol:" << MAGENTA << std::setfill(' ') << std::setw(3)
@@ -177,8 +200,8 @@ void PrintStatus(AudioPlayer &player, const Playlist &playlist)
     // Print track number in yellow
     if (playlist.size() > 1)
     {
-        std::cout << "|Track " << YELLOW << std::setfill(' ') << std::setw(2) 
-                  << (playlist.currentIndex() + 1) << RESET << "/" << YELLOW 
+        std::cout << "|Track " << YELLOW << std::setfill(' ') << std::setw(2)
+                  << (playlist.currentIndex() + 1) << RESET << "/" << YELLOW
                   << playlist.size() << RESET;
     }
 
@@ -186,9 +209,9 @@ void PrintStatus(AudioPlayer &player, const Playlist &playlist)
 }
 
 bool HandleCommand(char ch,
-                  AudioPlayer &player,
-                  Playlist &playlist,
-                  bool &running)
+                   AudioPlayer &player,
+                   Playlist &playlist,
+                   bool &running)
 {
     const auto cmd = std::tolower(ch);
     switch (cmd)
@@ -198,9 +221,6 @@ bool HandleCommand(char ch,
         break;
     case 'h':
         PrintHelp();
-        break;
-    case 'p':
-        player.play();
         break;
     case 's':
         player.stop();
@@ -226,16 +246,25 @@ bool HandleCommand(char ch,
         break;
     case 'f':
     case RIGHT_ARROW:
-        player.seek(player.getPosition() + 10*1000);
+        player.seek(player.getPosition() + 10 * 1000);
         break;
     case 'b':
     case LEFT_ARROW:
-        player.seek(std::max(0LL, player.getPosition() - 10*1000LL));
+        player.seek(std::max(0LL, player.getPosition() - 10 * 1000LL));
         break;
     case 'n':
         if (playlist.hasNext())
         {
             playlist.advance();
+            player.cleanup();
+            player.loadFile(playlist.current().filepath);
+            player.play();
+        }
+        break;
+    case 'p':
+        if (playlist.hasPrevious())
+        {
+            playlist.previous();
             player.cleanup();
             player.loadFile(playlist.current().filepath);
             player.play();
@@ -301,6 +330,7 @@ int main(int argc, char *argv[])
     cxxopts::Options options("vibe-player",
                              "Vibe Player - Play audio playlists");
 
+    // clang-format off
     options.add_options()
         ("playlist", "Playlist file to play", cxxopts::value<std::string>())
         ("f,file", "Play a single audio file", cxxopts::value<std::string>())
@@ -309,6 +339,7 @@ int main(int argc, char *argv[])
         ("no-interactive", "Disable interactive controls (auto-play only)")
         ("verbose", "Display status and debug information")
         ("h,help", "Print usage");
+    // clang-format on
 
     options.parse_positional({"playlist"});
     options.positional_help("<playlist_file>");
@@ -343,7 +374,8 @@ int main(int argc, char *argv[])
     // Load playlist
     std::optional<Playlist> playlist_opt;
 
-    if (stdin_mode) {
+    if (stdin_mode)
+    {
         // Read from stdin
         std::string content = readStdin();
 
@@ -351,58 +383,75 @@ int main(int argc, char *argv[])
         std::istringstream iss(content);
         char first_char = '\0';
         iss >> std::ws;
-        if (iss.peek() != EOF) {
+        if (iss.peek() != EOF)
+        {
             first_char = iss.peek();
         }
 
-        if (first_char == '{' || first_char == '[') {
+        if (first_char == '{' || first_char == '[')
+        {
             // JSON format
             playlist_opt = Playlist::fromJson(content);
-        } else {
+        }
+        else
+        {
             // Text format - parse paths
             std::vector<std::string> paths;
             std::istringstream stream(content);
             std::string line;
-            while (std::getline(stream, line)) {
+            while (std::getline(stream, line))
+            {
                 // Trim whitespace
                 line.erase(0, line.find_first_not_of(" \t\r\n"));
                 line.erase(line.find_last_not_of(" \t\r\n") + 1);
-                if (!line.empty() && line[0] != '#') {
+                if (!line.empty() && line[0] != '#')
+                {
                     paths.push_back(line);
                 }
             }
             playlist_opt = Playlist::fromPaths(paths);
         }
 
-        if (!playlist_opt) {
+        if (!playlist_opt)
+        {
             std::cerr << "Error: Failed to parse playlist from stdin" << std::endl;
             return 1;
         }
 
         // Reopen stdin to /dev/tty for keyboard input in interactive mode
-        if (interactive) {
-            if (!freopen("/dev/tty", "r", stdin)) {
+        if (interactive)
+        {
+            if (!freopen("/dev/tty", "r", stdin))
+            {
                 std::cerr << "Warning: Could not reopen stdin for keyboard input" << std::endl;
             }
         }
-    } else if (file_mode) {
+    }
+    else if (file_mode)
+    {
         // Single file mode
         std::string filepath = result["file"].as<std::string>();
         auto metadata = MetadataExtractor::extract(filepath, false);
-        if (!metadata) {
+        if (!metadata)
+        {
             std::cerr << "Error: Failed to extract metadata from file: " << filepath << std::endl;
             return 1;
         }
         playlist_opt = Playlist::fromTracks({*metadata});
-    } else if (result.count("playlist")) {
+    }
+    else if (result.count("playlist"))
+    {
         // Playlist file mode
         std::string playlist_file = result["playlist"].as<std::string>();
         playlist_opt = Playlist::fromFile(playlist_file);
-        if (!playlist_opt) {
+        if (!playlist_opt)
+        {
             std::cerr << "Error: Failed to load playlist from file: " << playlist_file << std::endl;
             return 1;
         }
-    } else {
+    }
+    else
+    {
         std::cerr << "Error: Please specify a playlist file, --stdin, or --file" << std::endl;
         std::cout << options.help() << std::endl;
         return 1;
@@ -413,7 +462,8 @@ int main(int argc, char *argv[])
     // Extract metadata for all tracks upfront (for text-based playlists)
     playlist.extractAllMetadata();
 
-    if (playlist.empty()) {
+    if (playlist.empty())
+    {
         std::cerr << "Error: Playlist is empty" << std::endl;
         return 1;
     }
@@ -432,17 +482,23 @@ int main(int argc, char *argv[])
     }
 
     std::cout << "\nVibe Player - " << playlist.size() << " track(s)";
-    if (interactive) {
-        std::cout << " - Press 'h' for help, 'p' to play\n" << std::endl;
-    } else {
-        std::cout << " - Auto-play mode\n" << std::endl;
+    if (interactive)
+    {
+        std::cout << " - Press 'h' for help, 'p' to play\n"
+                  << std::endl;
+    }
+    else
+    {
+        std::cout << " - Auto-play mode\n"
+                  << std::endl;
     }
 
     // Main event loop
     bool running = true;
     bool was_playing = false;
 
-    if (interactive) {
+    if (interactive)
+    {
         set_raw_mode(true);
     }
 
@@ -456,7 +512,8 @@ int main(int argc, char *argv[])
         PrintStatus(player, playlist);
 
         // Check for input (only in interactive mode)
-        if (interactive) {
+        if (interactive)
+        {
             char ch;
             if ((ch = quick_read()) != ERR)
             {
@@ -477,7 +534,8 @@ int main(int argc, char *argv[])
     std::cout << std::endl;
 
     // Restore stdin to blocking mode
-    if (interactive) {
+    if (interactive)
+    {
         set_raw_mode(false);
     }
 
