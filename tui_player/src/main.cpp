@@ -251,6 +251,117 @@ std::string ExtractAlbumArt(const std::string &filepath)
     }
 }
 
+// Update only the dynamic status information (time, progress, volume, state)
+void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const Playlist &playlist)
+{
+    // If status_plane is null (terminal too small), skip drawing
+    if (!status_plane)
+    {
+        return;
+    }
+
+    // Get dimensions for centering
+    unsigned int rows, cols;
+    ncplane_dim_yx(status_plane, &rows, &cols);
+    unsigned int term_cols;
+    ncplane_dim_yx(ncplane_parent(status_plane), nullptr, &term_cols);
+
+    // Calculate max width for centering (use 80% of terminal width or less)
+    int max_status_width = std::min(static_cast<int>(term_cols * 0.8), 80);
+
+    // Get player state
+    int pos = player.getPosition();
+    int dur = player.getDuration();
+    float vol = player.getVolume();
+
+    // State indicator with sophisticated colors
+    std::string state;
+    uint32_t state_color;
+    if (player.isPlaying())
+    {
+        state = "▶ Playing";
+        state_color = 0x98D8C8; // Soft mint green
+    }
+    else if (player.isPaused())
+    {
+        state = "⏸ Paused";
+        state_color = 0xF4BF75; // Warm amber
+    }
+    else
+    {
+        state = "⏹ Stopped";
+        state_color = 0xF09A8A; // Soft coral
+    }
+
+    // Clear only lines 4-6 (state, progress, volume - the dynamic parts)
+    ncplane_putstr_yx(status_plane, 4, 0, std::string(term_cols, ' ').c_str());
+    ncplane_putstr_yx(status_plane, 5, 0, std::string(term_cols, ' ').c_str());
+    ncplane_putstr_yx(status_plane, 6, 0, std::string(term_cols, ' ').c_str());
+
+    // Line 4: State and time
+    char time_buf[32];
+    snprintf(time_buf, sizeof(time_buf), "  %02d:%02d / %02d:%02d",
+             pos / 60000, (pos / 1000) % 60,
+             (dur / 1000) / 60, (dur / 1000) % 60);
+    std::string state_line = state + time_buf;
+    int state_x = (term_cols - state_line.length()) / 2;
+
+    ncplane_set_fg_rgb8(status_plane, (state_color >> 16) & 0xFF,
+                        (state_color >> 8) & 0xFF, state_color & 0xFF);
+    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
+    ncplane_putstr_yx(status_plane, 4, state_x, state.c_str());
+    ncplane_set_styles(status_plane, NCSTYLE_NONE);
+    ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
+    ncplane_putstr(status_plane, time_buf);
+
+    // Progress bar (line 5) - centered with max width
+    int progress_width = std::min(max_status_width, static_cast<int>(term_cols - 4));
+    if (progress_width > 0)
+    {
+        float progress = dur > 0 ? static_cast<float>(pos) / dur : 0.0f;
+        int filled = static_cast<int>(progress * (progress_width - 2));
+        int progress_x = (term_cols - progress_width) / 2;
+
+        ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
+        ncplane_putstr_yx(status_plane, 5, progress_x, "[");
+        for (int i = 0; i < progress_width - 2; ++i)
+        {
+            if (i < filled)
+            {
+                ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
+                ncplane_putstr(status_plane, "━");
+            }
+            else if (i == filled)
+            {
+                ncplane_set_fg_rgb8(status_plane, 0x98, 0xD8, 0xC8); // Lighter mint
+                ncplane_putstr(status_plane, "▶");
+            }
+            else
+            {
+                ncplane_set_fg_rgb8(status_plane, 0x50, 0x50, 0x48); // Dark warm gray
+                ncplane_putstr(status_plane, "─");
+            }
+        }
+        ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
+        ncplane_putstr(status_plane, "]");
+    }
+
+    // Line 6: Volume and track info - centered
+    char info_buf[64];
+    if (playlist.size() > 1)
+    {
+        snprintf(info_buf, sizeof(info_buf), "Volume: %3d%%  |  Track %zu of %zu",
+                 (int)(vol * 100), playlist.currentIndex() + 1, playlist.size());
+    }
+    else
+    {
+        snprintf(info_buf, sizeof(info_buf), "Volume: %3d%%", (int)(vol * 100));
+    }
+    int info_x = (term_cols - strlen(info_buf)) / 2;
+    ncplane_set_fg_rgb8(status_plane, 0xC4, 0xA7, 0xD6); // Soft purple
+    ncplane_putstr_yx(status_plane, 6, info_x, info_buf);
+}
+
 void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncplane* help_plane,
             struct ncplane* art_plane, struct ncvisual* album_art_visual,
             AudioPlayer &player, const Playlist &playlist, bool show_help)
@@ -295,30 +406,7 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
         }
     }
 
-    // Get player state
-    int pos = player.getPosition();
-    int dur = player.getDuration();
-    float vol = player.getVolume();
     const TrackMetadata &track = playlist.current();
-
-    // State indicator with sophisticated colors
-    std::string state;
-    uint32_t state_color;
-    if (player.isPlaying())
-    {
-        state = "▶ Playing";
-        state_color = 0x98D8C8; // Soft mint green
-    }
-    else if (player.isPaused())
-    {
-        state = "⏸ Paused";
-        state_color = 0xF4BF75; // Warm amber
-    }
-    else
-    {
-        state = "⏹ Stopped";
-        state_color = 0xF09A8A; // Soft coral
-    }
 
     // Calculate max width for centering (use 80% of terminal width or less)
     int max_status_width = std::min(static_cast<int>(cols * 0.8), 80);
@@ -401,68 +489,8 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
 
     // Line 3: Empty line for spacing
 
-    // Line 4: State and time
-    char time_buf[32];
-    snprintf(time_buf, sizeof(time_buf), "  %02d:%02d / %02d:%02d",
-             pos / 60000, (pos / 1000) % 60,
-             (dur / 1000) / 60, (dur / 1000) % 60);
-    std::string state_line = state + time_buf;
-    int state_x = (cols - state_line.length()) / 2;
-
-    ncplane_set_fg_rgb8(status_plane, (state_color >> 16) & 0xFF,
-                        (state_color >> 8) & 0xFF, state_color & 0xFF);
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
-    ncplane_putstr_yx(status_plane, 4, state_x, state.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
-    ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-    ncplane_putstr(status_plane, time_buf);
-
-    // Progress bar (line 5) - centered with max width
-    int progress_width = std::min(max_status_width, static_cast<int>(cols - 4));
-    if (progress_width > 0)
-    {
-        float progress = dur > 0 ? static_cast<float>(pos) / dur : 0.0f;
-        int filled = static_cast<int>(progress * (progress_width - 2));
-        int progress_x = (cols - progress_width) / 2;
-
-        ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-        ncplane_putstr_yx(status_plane, 5, progress_x, "[");
-        for (int i = 0; i < progress_width - 2; ++i)
-        {
-            if (i < filled)
-            {
-                ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-                ncplane_putstr(status_plane, "━");
-            }
-            else if (i == filled)
-            {
-                ncplane_set_fg_rgb8(status_plane, 0x98, 0xD8, 0xC8); // Lighter mint
-                ncplane_putstr(status_plane, "▶");
-            }
-            else
-            {
-                ncplane_set_fg_rgb8(status_plane, 0x50, 0x50, 0x48); // Dark warm gray
-                ncplane_putstr(status_plane, "─");
-            }
-        }
-        ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-        ncplane_putstr(status_plane, "]");
-    }
-
-    // Line 6: Volume and track info - centered
-    char info_buf[64];
-    if (playlist.size() > 1)
-    {
-        snprintf(info_buf, sizeof(info_buf), "Volume: %3d%%  |  Track %zu of %zu",
-                 (int)(vol * 100), playlist.currentIndex() + 1, playlist.size());
-    }
-    else
-    {
-        snprintf(info_buf, sizeof(info_buf), "Volume: %3d%%", (int)(vol * 100));
-    }
-    int info_x = (cols - strlen(info_buf)) / 2;
-    ncplane_set_fg_rgb8(status_plane, 0xC4, 0xA7, 0xD6); // Soft purple
-    ncplane_putstr_yx(status_plane, 6, info_x, info_buf);
+    // Lines 4-6: Dynamic status (state, progress, volume) - drawn by DrawStatusUpdate
+    DrawStatusUpdate(status_plane, player, playlist);
 
     // Help text
     if (show_help)
@@ -971,7 +999,8 @@ int main(int argc, char *argv[])
     ncplane_dim_yx(stdplane, &last_rows, &last_cols);
 
     // Track state for detecting changes
-    bool needs_redraw = true;
+    bool needs_full_redraw = true;  // Full redraw needed (track change, resize, help toggle)
+    bool needs_status_update = false;  // Only status update needed (position change)
     int last_position = -1;
     auto last_update = std::chrono::steady_clock::now();
     const auto update_interval = std::chrono::milliseconds(1000); // Update display once per second
@@ -982,14 +1011,12 @@ int main(int argc, char *argv[])
 
     while (running && !signal_received)
     {
-        bool state_changed = false;
-
         // Check playing state and update if changed
         bool currently_playing = player.isPlaying();
         if (currently_playing != is_playing)
         {
             is_playing = currently_playing;
-            state_changed = true;
+            needs_status_update = true;
         }
 
         // Only check dimensions every 5 iterations (500ms) to reduce overhead
@@ -1006,7 +1033,7 @@ int main(int argc, char *argv[])
 
                 // Recreate planes with new dimensions
                 createPlanes();
-                state_changed = true;
+                needs_full_redraw = true;
             }
         }
 
@@ -1032,7 +1059,7 @@ int main(int argc, char *argv[])
                     spdlog::warn("Failed to load album art from: {}", art_path);
                 }
             }
-            state_changed = true;
+            needs_full_redraw = true;
         }
 
         // Only check playback position when actually playing
@@ -1043,22 +1070,31 @@ int main(int argc, char *argv[])
             {
                 last_position = current_position;
 
-                // Only redraw if enough time has passed (throttle updates to once per second)
+                // Only update if enough time has passed (throttle updates to once per second)
                 auto now = std::chrono::steady_clock::now();
                 if (now - last_update >= update_interval)
                 {
                     last_update = now;
-                    state_changed = true;
+                    needs_status_update = true;
                 }
             }
         }
 
-        // Only draw and render if something changed or initial draw needed
-        if (needs_redraw || state_changed)
+        // Render based on what needs updating
+        if (needs_full_redraw)
         {
+            // Full redraw (track change, resize, help toggle, user command)
             DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
             notcurses_render(nc);
-            needs_redraw = false;
+            needs_full_redraw = false;
+            needs_status_update = false;  // Status is already drawn
+        }
+        else if (needs_status_update)
+        {
+            // Only update dynamic status info (more efficient)
+            DrawStatusUpdate(status_plane, player, playlist);
+            notcurses_render(nc);
+            needs_status_update = false;
         }
 
         // Use longer timeout when paused/stopped to reduce CPU usage
@@ -1076,8 +1112,21 @@ int main(int argc, char *argv[])
 
         if (ch != (char32_t)-1)
         {
+            // Store previous help state to detect toggle
+            bool prev_show_help = show_help;
+
             HandleCommand(ch, player, playlist, running, show_help);
-            needs_redraw = true; // Redraw after user input
+
+            // Full redraw needed if help toggled or track changed
+            // For other commands (volume, seek, play/pause), status update is sufficient
+            if (show_help != prev_show_help || ch == 'n' || ch == 'N' || ch == 'p' || ch == 'P')
+            {
+                needs_full_redraw = true;
+            }
+            else
+            {
+                needs_status_update = true;
+            }
         }
 
         // Check for auto-advance and playlist end (only when playing)
