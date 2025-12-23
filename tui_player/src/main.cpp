@@ -324,7 +324,7 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
     int max_status_width = std::min(static_cast<int>(cols * 0.8), 80);
 
     // Line 0: Song title
-    std::string song_label = "Song:   ";
+    std::string song_label = "Song: ";
     std::string song_value;
     if (track.title)
     {
@@ -338,10 +338,10 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
     int song_x = (cols - song_line.length()) / 2;
 
     ncplane_set_fg_rgb8(status_plane, 0xF0, 0xF0, 0xE8); // Soft cream
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
     ncplane_putstr_yx(status_plane, 0, song_x, song_label.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
+    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
     ncplane_putstr(status_plane, song_value.c_str());
+    ncplane_set_styles(status_plane, NCSTYLE_NONE);
 
     // Line 1: Artist
     std::string artist_label = "Artist: ";
@@ -358,9 +358,8 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
     int artist_x = (cols - artist_line.length()) / 2;
 
     ncplane_set_fg_rgb8(status_plane, 0x5F, 0xD4, 0xD4); // Turquoise
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
     ncplane_putstr_yx(status_plane, 1, artist_x, artist_label.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
+    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
     if (track.artist)
     {
         ncplane_putstr(status_plane, artist_value.c_str());
@@ -370,9 +369,10 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
         ncplane_set_fg_rgb8(status_plane, 0xA0, 0xA0, 0x98); // Warm gray
         ncplane_putstr(status_plane, artist_value.c_str());
     }
+    ncplane_set_styles(status_plane, NCSTYLE_NONE);
 
     // Line 2: Album
-    std::string album_label = "Album:  ";
+    std::string album_label = "Album: ";
     std::string album_value;
     if (track.album)
     {
@@ -386,9 +386,8 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
     int album_x = (cols - album_line.length()) / 2;
 
     ncplane_set_fg_rgb8(status_plane, 0xB4, 0xA7, 0xD6); // Soft lavender
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
     ncplane_putstr_yx(status_plane, 2, album_x, album_label.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
+    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
     if (track.album)
     {
         ncplane_putstr(status_plane, album_value.c_str());
@@ -398,6 +397,7 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
         ncplane_set_fg_rgb8(status_plane, 0xA0, 0xA0, 0x98); // Warm gray
         ncplane_putstr(status_plane, album_value.c_str());
     }
+    ncplane_set_styles(status_plane, NCSTYLE_NONE);
 
     // Line 3: Empty line for spacing
 
@@ -474,16 +474,11 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
 
         ncplane_set_fg_rgb8(help_plane, 0xD4, 0xC8, 0xA8); // Warm beige
         const char* help_lines[] = {
-            "  Space   - Play/Pause",
-            "  s       - Stop",
-            "  u       - Pause",
-            "  +/=     - Volume up",
-            "  -       - Volume down",
-            "  f/Right - Forward 10s",
-            "  b/Left  - Back 10s",
-            "  n       - Next track",
-            "  p       - Previous track",
-            "  h       - Toggle help",
+            "  Space   - Play/Pause         f/Right - Forward 10s",
+            "  s       - Stop               b/Left  - Back 10s",
+            "  u       - Pause              n       - Next track",
+            "  +/=/Up  - Volume up          p       - Previous track",
+            "  -/Down  - Volume down        h       - Toggle help",
             "  q       - Quit"
         };
 
@@ -535,10 +530,12 @@ bool HandleCommand(char32_t ch,
         break;
     case '+':
     case '=':
+    case NCKEY_UP:
         player.setVolume(std::min(1.0f, player.getVolume() + 0.05f));
         break;
     case '-':
     case '_':
+    case NCKEY_DOWN:
         player.setVolume(std::max(0.0f, player.getVolume() - 0.05f));
         break;
     case 'f':
@@ -973,20 +970,44 @@ int main(int argc, char *argv[])
     unsigned int last_rows = 0, last_cols = 0;
     ncplane_dim_yx(stdplane, &last_rows, &last_cols);
 
+    // Track state for detecting changes
+    bool needs_redraw = true;
+    int last_position = -1;
+    auto last_update = std::chrono::steady_clock::now();
+    const auto update_interval = std::chrono::milliseconds(1000); // Update display once per second
+
+    // Track playing state to avoid repeated checks
+    bool is_playing = player.isPlaying();
+    int loop_counter = 0; // Counter to reduce frequency of some checks
+
     while (running && !signal_received)
     {
-        // Check for terminal resize by comparing dimensions
-        unsigned int current_rows, current_cols;
-        ncplane_dim_yx(stdplane, &current_rows, &current_cols);
+        bool state_changed = false;
 
-        if (current_rows != last_rows || current_cols != last_cols)
+        // Check playing state and update if changed
+        bool currently_playing = player.isPlaying();
+        if (currently_playing != is_playing)
         {
-            spdlog::debug("Terminal resized from {}x{} to {}x{}", last_cols, last_rows, current_cols, current_rows);
-            last_rows = current_rows;
-            last_cols = current_cols;
+            is_playing = currently_playing;
+            state_changed = true;
+        }
 
-            // Recreate planes with new dimensions
-            createPlanes();
+        // Only check dimensions every 5 iterations (500ms) to reduce overhead
+        if (loop_counter % 5 == 0)
+        {
+            unsigned int current_rows, current_cols;
+            ncplane_dim_yx(stdplane, &current_rows, &current_cols);
+
+            if (current_rows != last_rows || current_cols != last_cols)
+            {
+                spdlog::debug("Terminal resized from {}x{} to {}x{}", last_cols, last_rows, current_cols, current_rows);
+                last_rows = current_rows;
+                last_cols = current_cols;
+
+                // Recreate planes with new dimensions
+                createPlanes();
+                state_changed = true;
+            }
         }
 
         // Check if track changed and load new album art
@@ -1011,30 +1032,62 @@ int main(int argc, char *argv[])
                     spdlog::warn("Failed to load album art from: {}", art_path);
                 }
             }
+            state_changed = true;
         }
 
-        // Draw UI
-        DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
+        // Only check playback position when actually playing
+        if (is_playing)
+        {
+            int current_position = player.getPosition();
+            if (current_position != last_position)
+            {
+                last_position = current_position;
 
-        // Render
-        notcurses_render(nc);
+                // Only redraw if enough time has passed (throttle updates to once per second)
+                auto now = std::chrono::steady_clock::now();
+                if (now - last_update >= update_interval)
+                {
+                    last_update = now;
+                    state_changed = true;
+                }
+            }
+        }
 
-        // Check for input with timeout
+        // Only draw and render if something changed or initial draw needed
+        if (needs_redraw || state_changed)
+        {
+            DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
+            notcurses_render(nc);
+            needs_redraw = false;
+        }
+
+        // Use longer timeout when paused/stopped to reduce CPU usage
         ncinput ni;
-        struct timespec ts = {0, 100000000}; // 100ms timeout
+        struct timespec ts;
+        if (is_playing)
+        {
+            ts = {0, 100000000}; // 100ms when playing (for responsive progress updates)
+        }
+        else
+        {
+            ts = {0, 250000000}; // 250ms when paused/stopped (less frequent wake-ups)
+        }
         char32_t ch = notcurses_get(nc, &ts, &ni);
 
         if (ch != (char32_t)-1)
         {
             HandleCommand(ch, player, playlist, running, show_help);
+            needs_redraw = true; // Redraw after user input
         }
 
-        // Check for auto-advance and playlist end
-        if (CheckAutoAdvance(player, playlist, repeat, was_playing))
+        // Check for auto-advance and playlist end (only when playing)
+        if (is_playing && CheckAutoAdvance(player, playlist, repeat, was_playing))
         {
             // Playlist has ended, exit
             running = false;
         }
+
+        loop_counter++;
     }
 
     // Cleanup
