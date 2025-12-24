@@ -107,7 +107,6 @@ bool AudioPlayer::loadFile(const std::string &filename)
     }
 
     device_initialized_ = true;
-    paused_frame_ = 0;
 
     return true;
 }
@@ -129,8 +128,6 @@ void AudioPlayer::play()
     else if (!playing_)
     {
         // Start playback
-        paused_frame_ = 0;
-
         ma_result result = ma_device_start(&device_);
         if (result != MA_SUCCESS)
         {
@@ -148,9 +145,6 @@ void AudioPlayer::pause()
     if (playing_ && !paused_)
     {
         paused_ = true;
-
-        // Get current frame position from decoder
-        ma_decoder_get_cursor_in_pcm_frames(&decoder_, &paused_frame_);
     }
 }
 
@@ -171,7 +165,6 @@ void AudioPlayer::stop()
 
         playing_ = false;
         paused_ = false;
-        paused_frame_ = 0;
     }
 }
 
@@ -202,13 +195,6 @@ int64_t AudioPlayer::getPosition() const
         return 0;
     }
 
-    // Use paused frame position when paused
-    if (paused_)
-    {
-        // Convert frames to milliseconds
-        return static_cast<int64_t>((paused_frame_ * 1000) / decoder_.outputSampleRate);
-    }
-
     // Get current cursor position from decoder
     ma_uint64 currentFrame = 0;
     ma_result result = ma_decoder_get_cursor_in_pcm_frames(&decoder_, &currentFrame);
@@ -237,15 +223,7 @@ void AudioPlayer::seek(int64_t position)
     ma_uint64 targetFrame = static_cast<ma_uint64>(position / 1000) * decoder_.outputSampleRate;
     ma_result result = ma_decoder_seek_to_pcm_frame(&decoder_, targetFrame);
 
-    if (result == MA_SUCCESS)
-    {
-        // Update paused frame if currently paused
-        if (paused_)
-        {
-            paused_frame_ = targetFrame;
-        }
-    }
-    else
+    if (result != MA_SUCCESS)
     {
         std::cerr << "Seek failed" << std::endl;
     }
@@ -267,6 +245,5 @@ void AudioPlayer::cleanup()
         decoder_initialized_ = false;
     }
 
-    paused_frame_ = 0;
     duration_ms_ = 0;
 }

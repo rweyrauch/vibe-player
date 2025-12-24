@@ -33,7 +33,6 @@ private:
     bool paused_ = false;
     float volume_ = 0.25f; // volume level (0.0 to 1.0)
     int64_t duration_ms_ = 0; // duration in milliseconds
-    ma_uint64 paused_frame_ = 0; // frame position when paused
 
     static void DataCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 };
