@@ -107,8 +107,7 @@ bool AudioPlayer::loadFile(const std::string &filename)
     }
 
     device_initialized_ = true;
-    paused_position_ = 0.0;
-    paused_frame_ = 0.0;
+    paused_frame_ = 0;
 
     return true;
 }
@@ -123,17 +122,14 @@ void AudioPlayer::play()
 
     if (paused_)
     {
-        // Resume from pause
+        // Resume from pause - decoder cursor is already at correct position
         paused_ = false;
         playing_ = true;
-        start_time_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(paused_position_);
     }
     else if (!playing_)
     {
         // Start playback
-        paused_position_ = 0;
         paused_frame_ = 0;
-        start_time_ = std::chrono::steady_clock::now();
 
         ma_result result = ma_device_start(&device_);
         if (result != MA_SUCCESS)
@@ -152,10 +148,8 @@ void AudioPlayer::pause()
     if (playing_ && !paused_)
     {
         paused_ = true;
-        updatePosition();
-        paused_position_ = getPosition();
 
-        // Get current frame position
+        // Get current frame position from decoder
         ma_decoder_get_cursor_in_pcm_frames(&decoder_, &paused_frame_);
     }
 }
@@ -177,7 +171,6 @@ void AudioPlayer::stop()
 
         playing_ = false;
         paused_ = false;
-        paused_position_ = 0;
         paused_frame_ = 0;
     }
 }
@@ -204,19 +197,29 @@ float AudioPlayer::getVolume() const
 
 int64_t AudioPlayer::getPosition() const
 {
-    if (!playing_ && !paused_)
+    if (!decoder_initialized_)
     {
-        return paused_position_;
+        return 0;
     }
 
+    // Use paused frame position when paused
     if (paused_)
     {
-        return paused_position_;
+        // Convert frames to milliseconds
+        return static_cast<int64_t>((paused_frame_ * 1000) / decoder_.outputSampleRate);
     }
 
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_).count();
-    return elapsed;
+    // Get current cursor position from decoder
+    ma_uint64 currentFrame = 0;
+    ma_result result = ma_decoder_get_cursor_in_pcm_frames(&decoder_, &currentFrame);
+
+    if (result != MA_SUCCESS)
+    {
+        return 0;
+    }
+
+    // Convert frames to milliseconds
+    return static_cast<int64_t>((currentFrame * 1000) / decoder_.outputSampleRate);
 }
 
 int64_t AudioPlayer::getDuration() const
@@ -236,12 +239,10 @@ void AudioPlayer::seek(int64_t position)
 
     if (result == MA_SUCCESS)
     {
-        paused_position_ = position;
-        paused_frame_ = targetFrame;
-
-        if (playing_ && !paused_)
+        // Update paused frame if currently paused
+        if (paused_)
         {
-            start_time_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(position);
+            paused_frame_ = targetFrame;
         }
     }
     else
@@ -266,17 +267,6 @@ void AudioPlayer::cleanup()
         decoder_initialized_ = false;
     }
 
-    paused_position_ = 0;
     paused_frame_ = 0;
     duration_ms_ = 0;
-}
-
-void AudioPlayer::updatePosition()
-{
-    if (playing_ && !paused_)
-    {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_).count();
-        paused_position_ = elapsed;
-    }
 }

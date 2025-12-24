@@ -1,7 +1,6 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
-#include <chrono>
 #include <string>
 
 #include "miniaudio.h"
@@ -26,7 +25,7 @@ public:
     void cleanup();
 
 private:
-    ma_decoder decoder_;
+    mutable ma_decoder decoder_;  // mutable to allow cursor queries in const methods
     ma_device device_;
     bool decoder_initialized_ = false;
     bool device_initialized_ = false;
@@ -34,11 +33,7 @@ private:
     bool paused_ = false;
     float volume_ = 0.25f; // volume level (0.0 to 1.0)
     int64_t duration_ms_ = 0; // duration in milliseconds
-    std::chrono::steady_clock::time_point start_time_;
-    int64_t paused_position_ = 0; // position when paused, in milliseconds
     ma_uint64 paused_frame_ = 0; // frame position when paused
-
-    void updatePosition();
 
     static void DataCallback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 };
