@@ -926,22 +926,8 @@ int main(int argc, char *argv[])
     bool needs_full_redraw = true;  // Full redraw needed (track change, resize, help toggle)
     bool needs_status_update = false;  // Only status update needed (position change)
 
-    // Track playing state to avoid repeated checks
-    bool is_playing = player.isPlaying();
-    int loop_counter = 0; // Counter to reduce frequency of some checks
-
     while (running && !signal_received)
     {
-        // Check playing state and update if changed
-        bool currently_playing = player.isPlaying();
-        if (is_playing != currently_playing)
-        {
-            is_playing = currently_playing;
-            needs_status_update = true;
-        }
-
-        // Only check dimensions every 5 iterations (500ms) to reduce overhead
-        if (loop_counter % 5 == 0)
         {
             unsigned int current_rows, current_cols;
             ncplane_dim_yx(stdplane, &current_rows, &current_cols);
@@ -1002,15 +988,7 @@ int main(int argc, char *argv[])
 
         // Use longer timeout when paused/stopped to reduce CPU usage
         ncinput ni;
-        struct timespec ts;
-        if (is_playing)
-        {
-            ts = {0, 100000000}; // 100ms when playing (for responsive progress updates)
-        }
-        else
-        {
-            ts = {0, 250000000}; // 250ms when paused/stopped (less frequent wake-ups)
-        }
+        struct timespec ts = {0, 100000000};
         char32_t ch = notcurses_get(nc, &ts, &ni);
 
         if (ch != (char32_t)-1)
@@ -1032,14 +1010,12 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Check for auto-advance and playlist end (only when playing)
-        if (is_playing && CheckAutoAdvance(player, playlist, repeat, was_playing))
+        // Check for auto-advance and playlist end
+        if (CheckAutoAdvance(player, playlist, repeat, was_playing))
         {
             // Playlist has ended, exit
             running = false;
         }
-
-        loop_counter++;
 
         // Sleep briefly to avoid busy waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
