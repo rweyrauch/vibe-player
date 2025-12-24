@@ -10,11 +10,14 @@
 #include <csignal>
 #include <cstring>
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -37,6 +40,23 @@
 
 volatile sig_atomic_t signal_received = 0;
 struct notcurses* nc = nullptr;
+
+// Thread synchronization for asynchronous status updates
+std::mutex g_ui_mutex;              // Protects all notcurses operations
+std::mutex g_state_mutex;           // Protects shared state flags
+std::condition_variable g_state_cv; // For signaling state changes
+
+struct SharedUIState {
+    std::atomic<bool> is_playing{false};
+    std::atomic<bool> should_exit{false};
+    std::atomic<bool> needs_full_redraw{false};
+
+    bool status_update_enabled{true};
+
+    AudioPlayer* player{nullptr};
+    const Playlist* playlist{nullptr};
+    struct ncplane* status_plane{nullptr};
+};
 
 void SignalHandler(int signum)
 {
@@ -252,7 +272,54 @@ std::string ExtractAlbumArt(const std::string &filepath)
     }
 }
 
+// Forward declaration
+void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const Playlist &playlist);
+
+// Background thread for asynchronous status updates
+void StatusUpdateThread(SharedUIState* shared_state)
+{
+    spdlog::debug("Status update thread started");
+
+    while (!shared_state->should_exit.load(std::memory_order_acquire))
+    {
+        // Wait with timeout (250ms for 4Hz update rate)
+        std::unique_lock<std::mutex> lock(g_state_mutex);
+        g_state_cv.wait_for(lock, std::chrono::milliseconds(250), [&]() {
+            return shared_state->should_exit.load(std::memory_order_acquire) ||
+                   shared_state->is_playing.load(std::memory_order_acquire);
+        });
+
+        // Check if should exit
+        if (shared_state->should_exit.load(std::memory_order_acquire)) break;
+
+        // Check if should update (playing and enabled)
+        bool should_update = shared_state->is_playing.load(std::memory_order_acquire) &&
+                            shared_state->status_update_enabled;
+        lock.unlock();
+
+        if (should_update && shared_state->status_plane && shared_state->player && shared_state->playlist)
+        {
+            // Lock UI mutex for notcurses operations
+            std::lock_guard<std::mutex> ui_lock(g_ui_mutex);
+
+            // Update only dynamic status information
+            DrawStatusUpdate(shared_state->status_plane,
+                           *shared_state->player,
+                           *shared_state->playlist);
+
+            // Render to display
+            if (nc)
+            {
+                notcurses_render(nc);
+            }
+        }
+    }
+
+    spdlog::debug("Status update thread exiting");
+}
+
 // Update only the dynamic status information (time, progress, volume, state)
+// REQUIRES: g_ui_mutex must be held by caller
 void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const Playlist &playlist)
 {
     // If status_plane is null (terminal too small), skip drawing
@@ -363,6 +430,7 @@ void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const P
     ncplane_putstr_yx(status_plane, 6, info_x, info_buf);
 }
 
+// REQUIRES: g_ui_mutex must be held by caller
 void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncplane* help_plane,
             struct ncplane* art_plane, struct ncvisual* album_art_visual,
             AudioPlayer &player, const Playlist &playlist, bool show_help)
@@ -951,6 +1019,15 @@ int main(int argc, char *argv[])
     // Create initial planes
     createPlanes();
 
+    // Create shared state for background thread
+    SharedUIState shared_state;
+    shared_state.player = &player;
+    shared_state.playlist = &playlist;
+    shared_state.status_plane = status_plane;
+
+    // Start background status update thread
+    std::thread status_thread(StatusUpdateThread, &shared_state);
+
     // Main event loop
     bool running = true;
     bool was_playing = false;
@@ -985,9 +1062,6 @@ int main(int argc, char *argv[])
     // Track state for detecting changes
     bool needs_full_redraw = true;  // Full redraw needed (track change, resize, help toggle)
     bool needs_status_update = false;  // Only status update needed (position change)
-    int last_position = -1;
-    auto last_update = std::chrono::steady_clock::now();
-    const auto update_interval = std::chrono::milliseconds(1000); // Update display once per second
 
     // Track playing state to avoid repeated checks
     bool is_playing = player.isPlaying();
@@ -1000,6 +1074,14 @@ int main(int argc, char *argv[])
         if (currently_playing != is_playing)
         {
             is_playing = currently_playing;
+
+            // Update shared state and signal background thread
+            {
+                std::lock_guard<std::mutex> lock(g_state_mutex);
+                shared_state.is_playing.store(is_playing, std::memory_order_release);
+            }
+            g_state_cv.notify_one();
+
             needs_status_update = true;
         }
 
@@ -1015,8 +1097,26 @@ int main(int argc, char *argv[])
                 last_rows = current_rows;
                 last_cols = current_cols;
 
+                // Temporarily disable background updates during resize
+                {
+                    std::lock_guard<std::mutex> lock(g_state_mutex);
+                    shared_state.status_update_enabled = false;
+                }
+
                 // Recreate planes with new dimensions
                 createPlanes();
+
+                // Update shared state with new status_plane pointer
+                {
+                    std::lock_guard<std::mutex> ui_lock(g_ui_mutex);
+                    shared_state.status_plane = status_plane;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(g_state_mutex);
+                    shared_state.status_update_enabled = true;
+                }
+
                 needs_full_redraw = true;
             }
         }
@@ -1046,38 +1146,42 @@ int main(int argc, char *argv[])
             needs_full_redraw = true;
         }
 
-        // Only check playback position when actually playing
-        if (is_playing)
-        {
-            int current_position = player.getPosition();
-            if (current_position != last_position)
-            {
-                last_position = current_position;
-
-                // Only update if enough time has passed (throttle updates to once per second)
-                auto now = std::chrono::steady_clock::now();
-                if (now - last_update >= update_interval)
-                {
-                    last_update = now;
-                    needs_status_update = true;
-                }
-            }
-        }
+        // Background thread now handles position updates
+        // No need to check position in main thread
 
         // Render based on what needs updating
         if (needs_full_redraw)
         {
+            // Temporarily disable background updates to prevent flicker
+            {
+                std::lock_guard<std::mutex> lock(g_state_mutex);
+                shared_state.status_update_enabled = false;
+            }
+
             // Full redraw (track change, resize, help toggle, user command)
-            DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
-            notcurses_render(nc);
+            {
+                std::lock_guard<std::mutex> ui_lock(g_ui_mutex);
+                DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
+                notcurses_render(nc);
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(g_state_mutex);
+                shared_state.status_update_enabled = true;
+            }
+
             needs_full_redraw = false;
             needs_status_update = false;  // Status is already drawn
         }
         else if (needs_status_update)
         {
-            // Only update dynamic status info (more efficient)
-            DrawStatusUpdate(status_plane, player, playlist);
-            notcurses_render(nc);
+            // Background thread now handles status updates
+            // Main thread only needs to trigger on immediate state changes
+            {
+                std::lock_guard<std::mutex> ui_lock(g_ui_mutex);
+                DrawStatusUpdate(status_plane, player, playlist);
+                notcurses_render(nc);
+            }
             needs_status_update = false;
         }
 
@@ -1121,6 +1225,23 @@ int main(int argc, char *argv[])
         }
 
         loop_counter++;
+
+        // Sleep briefly to avoid busy waiting
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    // Signal background thread to exit
+    {
+        std::lock_guard<std::mutex> lock(g_state_mutex);
+        shared_state.should_exit.store(true, std::memory_order_release);
+    }
+    g_state_cv.notify_all();
+
+    // Wait for background thread to complete
+    spdlog::debug("Waiting for status update thread to exit");
+    if (status_thread.joinable())
+    {
+        status_thread.join();
     }
 
     // Cleanup
