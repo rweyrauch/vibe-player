@@ -1,7 +1,4 @@
-// Include stb_vorbis before miniaudio to enable OGG support
-#include "extras/stb_vorbis.c"
 
-#define MINIAUDIO_IMPLEMENTATION
 #include "player.h"
 #include "path_handler.h"
 #include "dropbox_state.h"
@@ -13,7 +10,7 @@
 
 #include <algorithm>
 #include <iostream>
-//#include <spdlog/spdlog.h>
+#include <spdlog/spdlog.h>
 
 void AudioPlayer::DataCallback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uint32 frameCount)
 {
@@ -83,7 +80,7 @@ bool AudioPlayer::loadFile(const std::string &filename)
             return false;
         }
 
-        //spdlog::info("Loading Dropbox file: {}", filename);
+        spdlog::info("Loading Dropbox file: {}", filename);
         local_path = temp_mgr->getLocalPath(filename, *client);
 
         if (local_path.empty())

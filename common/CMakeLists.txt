@@ -3,6 +3,7 @@ add_library(vibe-player-common STATIC
     src/player.cpp
     src/metadata.cpp
     src/metadata_cache.cpp
+    src/miniaudio_impl.cpp
     src/playlist.cpp
     src/dropbox_client.cpp
     src/path_handler.cpp
