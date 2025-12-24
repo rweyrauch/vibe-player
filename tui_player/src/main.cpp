@@ -12,13 +12,10 @@
 
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <mutex>
-#include <queue>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -41,70 +38,6 @@
 
 volatile sig_atomic_t signal_received = 0;
 struct notcurses* nc = nullptr;
-
-// Message structure for status updates
-struct StatusUpdateMessage {
-    enum class Type {
-        UPDATE,      // Normal status update
-        SHUTDOWN,    // Signal thread to exit
-        FULL_REDRAW  // Trigger full UI redraw
-    };
-
-    Type type;
-
-    // Status data
-    int position_ms;
-    int duration_ms;
-    float volume;
-    std::string state;  // "Playing", "Paused", "Stopped"
-    size_t track_index;
-    size_t total_tracks;
-
-    // Constructor for normal updates
-    StatusUpdateMessage(int pos, int dur, float vol, std::string st, size_t idx, size_t total)
-        : type(Type::UPDATE), position_ms(pos), duration_ms(dur),
-          volume(vol), state(std::move(st)), track_index(idx), total_tracks(total) {}
-
-    // Constructor for control messages
-    explicit StatusUpdateMessage(Type t) : type(t), position_ms(0), duration_ms(0),
-                                           volume(0.0f), track_index(0), total_tracks(0) {}
-};
-
-// Thread-safe message queue for status updates
-class MessageQueue {
-private:
-    std::queue<StatusUpdateMessage> queue_;
-    mutable std::mutex mutex_;
-    std::condition_variable cv_;
-
-public:
-    void push(StatusUpdateMessage msg) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push(std::move(msg));
-        cv_.notify_one();
-    }
-
-    bool pop(StatusUpdateMessage& msg, std::chrono::milliseconds timeout) {
-        std::unique_lock<std::mutex> lock(mutex_);
-        if (cv_.wait_for(lock, timeout, [this] { return !queue_.empty(); })) {
-            msg = std::move(queue_.front());
-            queue_.pop();
-            return true;
-        }
-        return false;  // Timeout
-    }
-
-    size_t size() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return queue_.size();
-    }
-};
-
-// UI context for background thread
-struct UIContext {
-    struct ncplane* status_plane{nullptr};
-    std::mutex ui_mutex;  // Only for notcurses operations
-};
 
 void SignalHandler(int signum)
 {
@@ -144,31 +77,6 @@ std::string TruncateString(const std::string &str, size_t maxLength)
 
     // Truncate and append ellipsis
     return str.substr(0, maxLength - 3) + "...";
-}
-
-std::string FixFieldString(const std::string &str, size_t maxLength, char padChar = ' ')
-{
-    // If the string is longer than maxLength, truncate it
-    if (str.length() > maxLength)
-    {
-        // If maxLength is too small to include ellipsis, just return the truncated string
-        if (maxLength < 3)
-        {
-            return str.substr(0, maxLength);
-        }
-
-        // Truncate and append ellipsis
-        return str.substr(0, maxLength - 3) + "...";
-    }
-
-    // If the string is shorter than maxLength, pad it
-    if (str.length() < maxLength)
-    {
-        return str + std::string(maxLength - str.length(), padChar);
-    }
-
-    // If the string is exactly maxLength, return it as-is
-    return str;
 }
 
 void InitializeLogger(bool verbose)
@@ -320,144 +228,7 @@ std::string ExtractAlbumArt(const std::string &filepath)
     }
 }
 
-// Draw status update from message data
-// REQUIRES: ui_mutex must be held by caller
-void DrawStatusUpdateFromMessage(struct ncplane* status_plane, const StatusUpdateMessage& msg)
-{
-    if (!status_plane) return;
-
-    // Get dimensions for centering
-    unsigned int rows, cols;
-    ncplane_dim_yx(status_plane, &rows, &cols);
-    unsigned int term_cols;
-    ncplane_dim_yx(ncplane_parent(status_plane), nullptr, &term_cols);
-
-    int max_status_width = std::min(static_cast<int>(term_cols * 0.8), 80);
-
-    // Clear only lines 4-6 (dynamic parts)
-    ncplane_putstr_yx(status_plane, 4, 0, std::string(term_cols, ' ').c_str());
-    ncplane_putstr_yx(status_plane, 5, 0, std::string(term_cols, ' ').c_str());
-    ncplane_putstr_yx(status_plane, 6, 0, std::string(term_cols, ' ').c_str());
-
-    // Line 4: State and time (use message data)
-    uint32_t state_color;
-    std::string state_with_icon;
-    if (msg.state == "Playing") {
-        state_with_icon = "▶ Playing";
-        state_color = 0x98D8C8; // Soft mint green
-    } else if (msg.state == "Paused") {
-        state_with_icon = "⏸ Paused";
-        state_color = 0xF4BF75; // Warm amber
-    } else {
-        state_with_icon = "⏹ Stopped";
-        state_color = 0xF09A8A; // Soft coral
-    }
-
-    char time_buf[32];
-    snprintf(time_buf, sizeof(time_buf), "  %02d:%02d / %02d:%02d",
-             msg.position_ms / 60000, (msg.position_ms / 1000) % 60,
-             (msg.duration_ms / 1000) / 60, (msg.duration_ms / 1000) % 60);
-
-    std::string state_line = state_with_icon + time_buf;
-    int state_x = (term_cols - state_line.length()) / 2;
-
-    ncplane_set_fg_rgb8(status_plane, (state_color >> 16) & 0xFF,
-                        (state_color >> 8) & 0xFF, state_color & 0xFF);
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
-    ncplane_putstr_yx(status_plane, 4, state_x, state_with_icon.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
-    ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-    ncplane_putstr(status_plane, time_buf);
-
-    // Line 5: Progress bar (use message data)
-    int progress_width = std::min(max_status_width, static_cast<int>(term_cols - 4));
-    if (progress_width > 0)
-    {
-        float progress = msg.duration_ms > 0 ?
-            static_cast<float>(msg.position_ms) / msg.duration_ms : 0.0f;
-        int filled = static_cast<int>(progress * (progress_width - 2));
-        int progress_x = (term_cols - progress_width) / 2;
-
-        ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-        ncplane_putstr_yx(status_plane, 5, progress_x, "[");
-        for (int i = 0; i < progress_width - 2; ++i)
-        {
-            if (i < filled)
-            {
-                ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-                ncplane_putstr(status_plane, "━");
-            }
-            else if (i == filled)
-            {
-                ncplane_set_fg_rgb8(status_plane, 0x98, 0xD8, 0xC8); // Lighter mint
-                ncplane_putstr(status_plane, "▶");
-            }
-            else
-            {
-                ncplane_set_fg_rgb8(status_plane, 0x50, 0x50, 0x48); // Dark warm gray
-                ncplane_putstr(status_plane, "─");
-            }
-        }
-        ncplane_set_fg_rgb8(status_plane, 0x7F, 0xC8, 0xA0); // Sea green
-        ncplane_putstr(status_plane, "]");
-    }
-
-    // Line 6: Volume and track info (use message data)
-    char info_buf[64];
-    if (msg.total_tracks > 1)
-    {
-        snprintf(info_buf, sizeof(info_buf), "Volume: %3d%%  |  Track %zu of %zu",
-                 (int)(msg.volume * 100), msg.track_index + 1, msg.total_tracks);
-    }
-    else
-    {
-        snprintf(info_buf, sizeof(info_buf), "Volume: %3d%%", (int)(msg.volume * 100));
-    }
-    int info_x = (term_cols - strlen(info_buf)) / 2;
-    ncplane_set_fg_rgb8(status_plane, 0xC4, 0xA7, 0xD6); // Soft purple
-    ncplane_putstr_yx(status_plane, 6, info_x, info_buf);
-}
-
-// Background thread for asynchronous status updates
-void StatusUpdateThread(MessageQueue* msg_queue, UIContext* ui_ctx)
-{
-    spdlog::debug("Status update thread started");
-
-    while (true)
-    {
-        // Wait for message with 250ms timeout
-        StatusUpdateMessage msg(StatusUpdateMessage::Type::UPDATE);
-        if (msg_queue->pop(msg, std::chrono::milliseconds(250)))
-        {
-            // Process message
-            if (msg.type == StatusUpdateMessage::Type::SHUTDOWN)
-            {
-                spdlog::debug("Status update thread received shutdown signal");
-                break;
-            }
-
-            if (msg.type == StatusUpdateMessage::Type::UPDATE && ui_ctx->status_plane)
-            {
-                // Lock UI mutex for notcurses operations
-                std::lock_guard<std::mutex> ui_lock(ui_ctx->ui_mutex);
-
-                // Draw status using data from message
-                DrawStatusUpdateFromMessage(ui_ctx->status_plane, msg);
-
-                if (nc)
-                {
-                    notcurses_render(nc);
-                }
-            }
-        }
-        // Timeout - just continue waiting
-    }
-
-    spdlog::debug("Status update thread exiting");
-}
-
 // Update only the dynamic status information (time, progress, volume, state)
-// REQUIRES: g_ui_mutex must be held by caller
 void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const Playlist &playlist)
 {
     // If status_plane is null (terminal too small), skip drawing
@@ -568,7 +339,6 @@ void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const P
     ncplane_putstr_yx(status_plane, 6, info_x, info_buf);
 }
 
-// REQUIRES: g_ui_mutex must be held by caller
 void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncplane* help_plane,
             struct ncplane* art_plane, struct ncvisual* album_art_visual,
             AudioPlayer &player, const Playlist &playlist, bool show_help)
@@ -868,7 +638,6 @@ int main(int argc, char *argv[])
         ("f,file", "Play a single audio file", cxxopts::value<std::string>())
         ("stdin", "Read playlist from stdin")
         ("r,repeat", "Repeat playlist")
-        ("no-interactive", "Disable interactive controls (auto-play only)")
         ("verbose", "Display status and debug information")
         ("h,help", "Print usage");
     // clang-format on
@@ -897,7 +666,6 @@ int main(int argc, char *argv[])
     const bool repeat = result.count("repeat") > 0;
     const bool stdin_mode = result.count("stdin") > 0;
     const bool file_mode = result.count("file") > 0;
-    const bool interactive = result.count("no-interactive") == 0;
     const bool verbose = result.count("verbose") > 0;
 
     // Initialize logger
@@ -933,13 +701,10 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
 
-        // Reopen stdin to /dev/tty for keyboard input in interactive mode
-        if (interactive)
+        // Reopen stdin to /dev/tty for keyboard input
+        if (!freopen("/dev/tty", "r", stdin))
         {
-            if (!freopen("/dev/tty", "r", stdin))
-            {
-                std::cerr << "Warning: Could not reopen stdin for keyboard input" << std::endl;
-            }
+            std::cerr << "Warning: Could not reopen stdin for keyboard input" << std::endl;
         }
     }
     else if (file_mode)
@@ -994,37 +759,6 @@ int main(int argc, char *argv[])
     if (!player.loadFile(playlist.current().filepath))
     {
         return EXIT_FAILURE;
-    }
-
-    // Initialize notcurses only in interactive mode
-    if (!interactive)
-    {
-        std::cout << "\nTUI Player - " << playlist.size() << " track(s)";
-        std::cout << " - Auto-play mode\n" << std::endl;
-
-        // Main event loop (non-interactive)
-        bool running = true;
-        bool was_playing = false;
-
-        // Start playing automatically
-        player.play();
-        was_playing = true;
-
-        while (running && !signal_received)
-        {
-            // Check for auto-advance and playlist end
-            if (CheckAutoAdvance(player, playlist, repeat, was_playing))
-            {
-                // Playlist has ended, exit
-                running = false;
-            }
-
-            // Sleep briefly to avoid busy waiting
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-
-        player.cleanup();
-        return EXIT_SUCCESS;
     }
 
     // Clear screen before starting TUI
@@ -1157,16 +891,6 @@ int main(int argc, char *argv[])
     // Create initial planes
     createPlanes();
 
-    // Create UI context for background thread
-    UIContext ui_ctx;
-    ui_ctx.status_plane = status_plane;
-
-    // Create message queue for status updates
-    MessageQueue msg_queue;
-
-    // Start background status update thread
-    std::thread status_thread(StatusUpdateThread, &msg_queue, &ui_ctx);
-
     // Main event loop
     bool running = true;
     bool was_playing = false;
@@ -1210,21 +934,9 @@ int main(int argc, char *argv[])
     {
         // Check playing state and update if changed
         bool currently_playing = player.isPlaying();
-        if (currently_playing != is_playing)
+        if (is_playing != currently_playing)
         {
             is_playing = currently_playing;
-
-            // Send immediate status update on state change
-            int pos = player.getPosition();
-            int dur = player.getDuration();
-            float vol = player.getVolume();
-            std::string state = is_playing ? "Playing" :
-                               (player.isPaused() ? "Paused" : "Stopped");
-
-            StatusUpdateMessage msg(pos, dur, vol, state,
-                                   playlist.currentIndex(), playlist.size());
-            msg_queue.push(std::move(msg));
-
             needs_status_update = true;
         }
 
@@ -1242,12 +954,6 @@ int main(int argc, char *argv[])
 
                 // Recreate planes with new dimensions
                 createPlanes();
-
-                // Update UI context with new status_plane pointer
-                {
-                    std::lock_guard<std::mutex> ui_lock(ui_ctx.ui_mutex);
-                    ui_ctx.status_plane = status_plane;
-                }
 
                 needs_full_redraw = true;
             }
@@ -1278,53 +984,19 @@ int main(int argc, char *argv[])
             needs_full_redraw = true;
         }
 
-        // Send periodic status update messages to UI thread (4Hz when playing)
-        {
-            static auto last_msg_time = std::chrono::steady_clock::now();
-            auto now = std::chrono::steady_clock::now();
-
-            if (is_playing && (now - last_msg_time >= std::chrono::milliseconds(250)))
-            {
-                last_msg_time = now;
-
-                // Sample player state and send message
-                int pos = player.getPosition();
-                int dur = player.getDuration();
-                float vol = player.getVolume();
-                std::string state = "Playing";
-
-                StatusUpdateMessage msg(pos, dur, vol, state,
-                                       playlist.currentIndex(), playlist.size());
-                msg_queue.push(std::move(msg));
-            }
-        }
-
         // Render based on what needs updating
         if (needs_full_redraw)
         {
-            // Full redraw with UI mutex lock
-            {
-                std::lock_guard<std::mutex> ui_lock(ui_ctx.ui_mutex);
-                DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
-                notcurses_render(nc);
-            }
+            DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
+            notcurses_render(nc);
 
             needs_full_redraw = false;
             needs_status_update = false;  // Status is already drawn
         }
         else if (needs_status_update)
         {
-            // Send immediate status update message
-            int pos = player.getPosition();
-            int dur = player.getDuration();
-            float vol = player.getVolume();
-            std::string state = is_playing ? "Playing" :
-                               (player.isPaused() ? "Paused" : "Stopped");
-
-            StatusUpdateMessage msg(pos, dur, vol, state,
-                                   playlist.currentIndex(), playlist.size());
-            msg_queue.push(std::move(msg));
-
+            DrawStatusUpdate(status_plane, player, playlist);
+            notcurses_render(nc);
             needs_status_update = false;
         }
 
@@ -1371,16 +1043,6 @@ int main(int argc, char *argv[])
 
         // Sleep briefly to avoid busy waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    // Send shutdown message to background thread
-    msg_queue.push(StatusUpdateMessage(StatusUpdateMessage::Type::SHUTDOWN));
-
-    // Wait for background thread to complete
-    spdlog::debug("Waiting for status update thread to exit");
-    if (status_thread.joinable())
-    {
-        status_thread.join();
     }
 
     // Cleanup
