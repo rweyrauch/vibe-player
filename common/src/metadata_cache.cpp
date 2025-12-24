@@ -1,4 +1,7 @@
 #include "metadata_cache.h"
+#include "path_handler.h"
+#include "dropbox_client.h"
+#include "dropbox_state.h"
 
 #include <fstream>
 #include <iostream>
@@ -6,6 +9,7 @@
 #include <sstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
 using json = nlohmann::json;
 
@@ -170,6 +174,82 @@ bool MetadataCache::isValid(const std::string &library_path,
         }
     }
 
+    return true;
+}
+
+bool MetadataCache::isValidDropbox(const std::vector<TrackMetadata> &cached_tracks)
+{
+    auto* client = getDropboxClient();
+
+    if (!client) {
+        spdlog::error("Dropbox client not initialized for cache validation");
+        return false;
+    }
+
+    // Sample 10 files to check if content_hash matches
+    size_t sample_size = std::min(cached_tracks.size(), size_t(10));
+    std::vector<std::string> sample_paths;
+
+    for (size_t i = 0; i < sample_size; i++)
+    {
+        size_t idx = (i * cached_tracks.size()) / sample_size;
+        if (idx >= cached_tracks.size())
+            continue;
+
+        const auto &track = cached_tracks[idx];
+
+        // Parse dropbox URL to get path
+        std::string dropbox_path = PathHandler::parseDropboxUrl(track.filepath);
+        sample_paths.push_back(dropbox_path);
+    }
+
+    if (sample_paths.empty()) {
+        return true;  // No files to validate
+    }
+
+    // Batch get metadata from Dropbox
+    auto file_metadata_list = client->getFileMetadataBatch(sample_paths);
+
+    // Check if we got metadata for all sampled files
+    if (file_metadata_list.size() != sample_paths.size()) {
+        spdlog::warn("Cache validation: Expected {} files, got {} from Dropbox",
+                    sample_paths.size(), file_metadata_list.size());
+        return false;
+    }
+
+    // Verify content_hash matches for each file
+    for (size_t i = 0; i < sample_size; i++)
+    {
+        size_t idx = (i * cached_tracks.size()) / sample_size;
+        if (idx >= cached_tracks.size())
+            continue;
+
+        const auto &track = cached_tracks[idx];
+
+        // Find corresponding metadata from batch result
+        bool found = false;
+        for (const auto& file_meta : file_metadata_list) {
+            std::string dropbox_url = PathHandler::toDropboxUrl(file_meta.path);
+            if (dropbox_url == track.filepath) {
+                found = true;
+
+                // Check if content_hash matches
+                if (!track.dropbox_hash || *track.dropbox_hash != file_meta.content_hash) {
+                    spdlog::info("Cache invalid: Content hash mismatch for {}", track.filepath);
+                    return false;
+                }
+
+                break;
+            }
+        }
+
+        if (!found) {
+            spdlog::info("Cache invalid: File not found on Dropbox: {}", track.filepath);
+            return false;
+        }
+    }
+
+    spdlog::debug("Dropbox cache validation passed");
     return true;
 }
 

@@ -23,6 +23,3 @@ target_link_libraries(vibe-playlist
     ssl
     crypto
 )
-
-# Installation
-install(TARGETS vibe-playlist DESTINATION bin)

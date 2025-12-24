@@ -7,7 +7,7 @@
 #include <nlohmann/json.hpp>
 
 struct TrackMetadata {
-    std::string filepath;          // Full absolute path
+    std::string filepath;          // Full absolute path (or dropbox:// URL)
     std::string filename;          // Filename only (for display)
     std::optional<std::string> title;
     std::optional<std::string> artist;
@@ -16,6 +16,8 @@ struct TrackMetadata {
     std::optional<int> year;
     int64_t duration_ms;           // Duration in milliseconds
     int64_t file_mtime;            // Last modification time (for cache invalidation)
+    std::optional<std::string> dropbox_hash;  // Dropbox content_hash for validation
+    std::optional<std::string> dropbox_rev;   // Dropbox revision
 
     // Convert to JSON
     nlohmann::json toJson() const;
@@ -31,6 +33,13 @@ public:
 
     // Extract metadata from all files in a directory
     static std::vector<TrackMetadata> extractFromDirectory(
+        const std::string& directory_path,
+        bool recursive = true,
+        bool verbose = false
+    );
+
+    // Extract metadata from Dropbox directory
+    static std::vector<TrackMetadata> extractFromDropboxDirectory(
         const std::string& directory_path,
         bool recursive = true,
         bool verbose = false

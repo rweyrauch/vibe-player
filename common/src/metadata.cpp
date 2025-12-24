@@ -1,4 +1,8 @@
 #include "metadata.h"
+#include "path_handler.h"
+#include "dropbox_client.h"
+#include "temp_file_manager.h"
+#include "dropbox_state.h"
 
 #include <fileref.h>
 #include <tag.h>
@@ -174,6 +178,25 @@ nlohmann::json TrackMetadata::toJson() const
 
     j["duration_ms"] = duration_ms;
     j["file_mtime"] = file_mtime;
+
+    if (dropbox_hash)
+    {
+        j["dropbox_hash"] = *dropbox_hash;
+    }
+    else
+    {
+        j["dropbox_hash"] = nullptr;
+    }
+
+    if (dropbox_rev)
+    {
+        j["dropbox_rev"] = *dropbox_rev;
+    }
+    else
+    {
+        j["dropbox_rev"] = nullptr;
+    }
+
     return j;
 }
 
@@ -208,6 +231,15 @@ std::optional<TrackMetadata> TrackMetadata::fromJson(const nlohmann::json &j)
 
         metadata.duration_ms = j.at("duration_ms").get<int64_t>();
         metadata.file_mtime = j.at("file_mtime").get<int64_t>();
+
+        if (j.contains("dropbox_hash") && !j["dropbox_hash"].is_null())
+        {
+            metadata.dropbox_hash = j["dropbox_hash"].get<std::string>();
+        }
+        if (j.contains("dropbox_rev") && !j["dropbox_rev"].is_null())
+        {
+            metadata.dropbox_rev = j["dropbox_rev"].get<std::string>();
+        }
 
         return metadata;
     }
@@ -310,6 +342,11 @@ std::vector<TrackMetadata> MetadataExtractor::extractFromDirectory(
     bool recursive,
     bool verbose)
 {
+    // Check if this is a Dropbox path and delegate if so
+    if (PathHandler::isDropboxPath(directory_path))
+    {
+        return extractFromDropboxDirectory(directory_path, recursive, verbose);
+    }
 
     std::vector<TrackMetadata> results;
     const std::vector<std::string> valid_extensions = {".wav", ".mp3", ".flac", ".ogg"};
@@ -377,6 +414,89 @@ std::vector<TrackMetadata> MetadataExtractor::extractFromDirectory(
     catch (const fs::filesystem_error &e)
     {
         std::cerr << "Error scanning directory: " << e.what() << std::endl;
+    }
+
+    return results;
+}
+
+std::vector<TrackMetadata> MetadataExtractor::extractFromDropboxDirectory(
+    const std::string &directory_path,
+    bool recursive,
+    bool verbose)
+{
+    std::vector<TrackMetadata> results;
+    const std::vector<std::string> valid_extensions = {".wav", ".mp3", ".flac", ".ogg"};
+
+    namespace fs = std::filesystem;
+
+    auto* client = getDropboxClient();
+    auto* temp_mgr = getTempFileManager();
+
+    if (!client) {
+        std::cerr << "Error: Dropbox client not initialized" << std::endl;
+        return results;
+    }
+
+    if (!temp_mgr) {
+        std::cerr << "Error: Temp file manager not initialized" << std::endl;
+        return results;
+    }
+
+    try {
+        std::string dropbox_path = PathHandler::parseDropboxUrl(directory_path);
+        spdlog::info("Scanning Dropbox directory: {}", dropbox_path);
+
+        auto files = client->listDirectory(dropbox_path, recursive);
+
+        spdlog::info("Found {} items in Dropbox directory", files.size());
+
+        for (const auto& file : files) {
+            // Skip directories
+            if (file.is_directory) {
+                continue;
+            }
+
+            std::string ext = fs::path(file.path).extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            if (std::find(valid_extensions.begin(), valid_extensions.end(), ext)
+                != valid_extensions.end()) {
+
+                // Download temporarily for metadata extraction
+                std::string dropbox_url = PathHandler::toDropboxUrl(file.path);
+                std::string local_path = temp_mgr->getLocalPath(dropbox_url, *client);
+
+                if (!local_path.empty()) {
+                    auto metadata = extract(local_path, verbose);
+                    if (metadata) {
+                        // Replace local path with Dropbox URL
+                        metadata->filepath = dropbox_url;
+                        metadata->filename = fs::path(file.path).filename().string();
+
+                        // Store Dropbox-specific cache keys
+                        metadata->dropbox_hash = file.content_hash;
+                        metadata->dropbox_rev = file.rev;
+                        metadata->file_mtime = file.modified_time;
+
+                        results.push_back(*metadata);
+                    }
+                } else {
+                    spdlog::warn("Failed to download file for metadata extraction: {}", file.path);
+                }
+            }
+        }
+
+        // Sort by filepath
+        std::sort(results.begin(), results.end(),
+                  [](const TrackMetadata &a, const TrackMetadata &b)
+                  {
+                      return a.filepath < b.filepath;
+                  });
+
+        spdlog::info("Extracted metadata for {} Dropbox files", results.size());
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error scanning Dropbox directory: " << e.what() << std::endl;
     }
 
     return results;

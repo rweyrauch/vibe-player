@@ -4,6 +4,7 @@
  */
 
 #include "playlist.h"
+#include "path_handler.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -27,6 +28,12 @@ Playlist Playlist::fromTracks(const std::vector<TrackMetadata> &tracks)
 std::string Playlist::resolvePath(const std::string &path) const
 {
     namespace fs = std::filesystem;
+
+    // Check if Dropbox path - return as-is without canonicalization
+    if (PathHandler::isDropboxPath(path))
+    {
+        return path;
+    }
 
     // Handle home directory expansion
     std::string resolved = path;

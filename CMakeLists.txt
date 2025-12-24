@@ -130,3 +130,16 @@ add_subdirectory(common)
 add_subdirectory(player)
 add_subdirectory(list)
 add_subdirectory(tui_player)
+
+# Custom install script to bypass dependency install rules
+install(CODE "
+    message(STATUS \"Installing vibe-player executables...\")
+    file(INSTALL
+        DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\"
+        TYPE EXECUTABLE
+        FILES
+            \"${CMAKE_CURRENT_BINARY_DIR}/player/vibe-player\"
+            \"${CMAKE_CURRENT_BINARY_DIR}/tui_player/tui-player\"
+            \"${CMAKE_CURRENT_BINARY_DIR}/list/vibe-playlist\"
+    )
+" COMPONENT vibe-player-runtime)

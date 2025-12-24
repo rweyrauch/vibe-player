@@ -13,6 +13,3 @@ target_link_libraries(tui-player
     Threads::Threads
     m
 )
-
-# Installation
-install(TARGETS tui-player DESTINATION bin)

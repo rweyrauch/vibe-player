@@ -20,6 +20,9 @@ public:
     bool isValid(const std::string& library_path,
                  const std::vector<TrackMetadata>& cached_tracks);
 
+    // Check if Dropbox cache is valid (using content_hash)
+    bool isValidDropbox(const std::vector<TrackMetadata>& cached_tracks);
+
     // Clear cache for a library path
     void clear(const std::string& library_path);
 

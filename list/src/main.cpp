@@ -6,6 +6,8 @@
 #include "metadata.h"
 #include "metadata_cache.h"
 #include "playlist.h"
+#include "path_handler.h"
+#include "dropbox_state.h"
 #include "ai_backend.h"
 #include "ai_backend_claude.h"
 #include "ai_backend_llamacpp.h"
@@ -67,13 +69,47 @@ std::vector<TrackMetadata> GetLibraryMetadata(
 {
     MetadataCache cache;
 
+    // Initialize Dropbox if needed
+    if (PathHandler::isDropboxPath(library_path))
+    {
+        const char* token = std::getenv("DROPBOX_ACCESS_TOKEN");
+        if (!token || strlen(token) == 0)
+        {
+            std::cerr << "Error: DROPBOX_ACCESS_TOKEN environment variable not set" << std::endl;
+            std::cerr << "Please set your Dropbox access token to scan Dropbox directories" << std::endl;
+            return {};
+        }
+
+        try {
+            initializeDropboxSupport(token);
+        } catch (const std::exception& e) {
+            std::cerr << "Error: Failed to initialize Dropbox: " << e.what() << std::endl;
+            std::cerr << "Please verify your DROPBOX_ACCESS_TOKEN is valid" << std::endl;
+            return {};
+        }
+    }
+
     if (!force_rescan)
     {
         auto cached = cache.load(library_path);
-        if (cached && cache.isValid(library_path, *cached))
+        if (cached)
         {
-            spdlog::info("Using cached metadata ({} tracks)", cached->size());
-            return *cached;
+            // Use appropriate validation method
+            bool valid = false;
+            if (PathHandler::isDropboxPath(library_path))
+            {
+                valid = cache.isValidDropbox(*cached);
+            }
+            else
+            {
+                valid = cache.isValid(library_path, *cached);
+            }
+
+            if (valid)
+            {
+                spdlog::info("Using cached metadata ({} tracks)", cached->size());
+                return *cached;
+            }
         }
     }
 
@@ -92,6 +128,9 @@ std::vector<TrackMetadata> GetLibraryMetadata(
 
 int main(int argc, char *argv[])
 {
+    // Register cleanup handler
+    std::atexit(cleanupDropboxSupport);
+
     // Parse command line arguments using cxxopts
     cxxopts::Options options("vibe-playlist",
                              "Vibe Playlist Generator - Generate music playlists");
@@ -315,6 +354,30 @@ int main(int argc, char *argv[])
         // Directory mode
         std::string dir_path = result["directory"].as<std::string>();
 
+        std::cerr << "DEBUG: Directory path: '" << dir_path << "'" << std::endl;
+        std::cerr << "DEBUG: Is Dropbox path: " << PathHandler::isDropboxPath(dir_path) << std::endl;
+
+        // Initialize Dropbox if needed
+        if (PathHandler::isDropboxPath(dir_path))
+        {
+            std::cerr << "DEBUG: Initializing Dropbox..." << std::endl;
+            const char* token = std::getenv("DROPBOX_ACCESS_TOKEN");
+            if (!token || strlen(token) == 0)
+            {
+                std::cerr << "Error: DROPBOX_ACCESS_TOKEN environment variable not set" << std::endl;
+                std::cerr << "Please set your Dropbox access token to scan Dropbox directories" << std::endl;
+                return EXIT_FAILURE;
+            }
+
+            try {
+                initializeDropboxSupport(token);
+            } catch (const std::exception& e) {
+                std::cerr << "Error: Failed to initialize Dropbox: " << e.what() << std::endl;
+                std::cerr << "Please verify your DROPBOX_ACCESS_TOKEN is valid" << std::endl;
+                return EXIT_FAILURE;
+            }
+        }
+
         spdlog::info("Scanning directory and extracting metadata...");
         playlist_tracks = MetadataExtractor::extractFromDirectory(dir_path, true, verbose);
 
@@ -330,6 +393,26 @@ int main(int argc, char *argv[])
     {
         // Single file mode
         std::string file_path = result["file"].as<std::string>();
+
+        // Initialize Dropbox if needed
+        if (PathHandler::isDropboxPath(file_path))
+        {
+            const char* token = std::getenv("DROPBOX_ACCESS_TOKEN");
+            if (!token || strlen(token) == 0)
+            {
+                std::cerr << "Error: DROPBOX_ACCESS_TOKEN environment variable not set" << std::endl;
+                std::cerr << "Please set your Dropbox access token to access Dropbox files" << std::endl;
+                return EXIT_FAILURE;
+            }
+
+            try {
+                initializeDropboxSupport(token);
+            } catch (const std::exception& e) {
+                std::cerr << "Error: Failed to initialize Dropbox: " << e.what() << std::endl;
+                std::cerr << "Please verify your DROPBOX_ACCESS_TOKEN is valid" << std::endl;
+                return EXIT_FAILURE;
+            }
+        }
 
         // Extract metadata for the single file
         auto metadata = MetadataExtractor::extract(file_path, verbose);

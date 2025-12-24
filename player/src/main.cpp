@@ -6,6 +6,8 @@
 #include "player.h"
 #include "metadata.h"
 #include "playlist.h"
+#include "path_handler.h"
+#include "dropbox_state.h"
 
 #include <csignal>
 #include <cstring>
@@ -327,6 +329,9 @@ std::string readStdin()
 
 int main(int argc, char *argv[])
 {
+    // Register cleanup handler
+    std::atexit(cleanupDropboxSupport);
+
     // Parse command line arguments using cxxopts
     cxxopts::Options options("vibe-player",
                              "Vibe Player - Play audio playlists");
@@ -450,6 +455,36 @@ int main(int argc, char *argv[])
     {
         std::cerr << "Error: Playlist is empty" << std::endl;
         return EXIT_FAILURE;
+    }
+
+    // Initialize Dropbox if playlist contains Dropbox files
+    bool has_dropbox = false;
+    for (const auto& path : playlist.paths())
+    {
+        if (PathHandler::isDropboxPath(path))
+        {
+            has_dropbox = true;
+            break;
+        }
+    }
+
+    if (has_dropbox)
+    {
+        const char* token = std::getenv("DROPBOX_ACCESS_TOKEN");
+        if (!token || strlen(token) == 0)
+        {
+            std::cerr << "Error: Playlist contains Dropbox files but DROPBOX_ACCESS_TOKEN environment variable not set" << std::endl;
+            std::cerr << "Please set your Dropbox access token to play Dropbox files" << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        try {
+            initializeDropboxSupport(token);
+        } catch (const std::exception& e) {
+            std::cerr << "Error: Failed to initialize Dropbox: " << e.what() << std::endl;
+            std::cerr << "Please verify your DROPBOX_ACCESS_TOKEN is valid" << std::endl;
+            return EXIT_FAILURE;
+        }
     }
 
     AudioPlayer player;

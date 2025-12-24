@@ -12,6 +12,3 @@ target_link_libraries(vibe-player
     Threads::Threads
     m
 )
-
-# Installation
-install(TARGETS vibe-player DESTINATION bin)

@@ -3,6 +3,9 @@
 
 #define MINIAUDIO_IMPLEMENTATION
 #include "player.h"
+#include "path_handler.h"
+#include "dropbox_state.h"
+#include "temp_file_manager.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -10,6 +13,7 @@
 
 #include <algorithm>
 #include <iostream>
+//#include <spdlog/spdlog.h>
 
 void AudioPlayer::DataCallback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uint32 frameCount)
 {
@@ -65,13 +69,51 @@ bool AudioPlayer::loadFile(const std::string &filename)
 {
     cleanup();
 
+    // Resolve path (download Dropbox files if needed)
+    std::string local_path = filename;
+
+    if (PathHandler::isDropboxPath(filename))
+    {
+        auto* client = getDropboxClient();
+        auto* temp_mgr = getTempFileManager();
+
+        if (!client || !temp_mgr)
+        {
+            std::cerr << "Error: Dropbox support not initialized" << std::endl;
+            return false;
+        }
+
+        //spdlog::info("Loading Dropbox file: {}", filename);
+        local_path = temp_mgr->getLocalPath(filename, *client);
+
+        if (local_path.empty())
+        {
+            std::cerr << "Error: Failed to download Dropbox file: " << filename << std::endl;
+            return false;
+        }
+
+        // Mark file as active during playback
+        temp_mgr->markActive(filename);
+    }
+
     // Initialize decoder
     ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
-    ma_result result = ma_decoder_init_file(filename.c_str(), &decoderConfig, &decoder_);
+    ma_result result = ma_decoder_init_file(local_path.c_str(), &decoderConfig, &decoder_);
 
     if (result != MA_SUCCESS)
     {
-        std::cerr << "Error loading audio file: " << filename << " (error code: " << result << ")" << std::endl;
+        std::cerr << "Error loading audio file: " << local_path << " (error code: " << result << ")" << std::endl;
+
+        // Mark file as inactive on failure
+        if (PathHandler::isDropboxPath(filename))
+        {
+            auto* temp_mgr = getTempFileManager();
+            if (temp_mgr)
+            {
+                temp_mgr->markInactive(filename);
+            }
+        }
+
         return false;
     }
 
