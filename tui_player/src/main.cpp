@@ -782,6 +782,7 @@ int main(int argc, char *argv[])
     struct ncplane* status_plane = nullptr;
     struct ncplane* help_plane = nullptr;
     struct ncplane* art_plane = nullptr;
+    struct ncvisual* album_art_visual = nullptr;
 
     // Lambda to create/recreate planes
     auto createPlanes = [&]() {
@@ -836,15 +837,47 @@ int main(int argc, char *argv[])
             return;
         }
 
-        // Album art plane (centered, larger size for better resolution)
-        // Use up to 60 columns or 60% of terminal width, whichever is smaller
-        int art_cols = std::min(60, static_cast<int>(cols * 0.6));
-        art_cols = std::max(10, art_cols); // Minimum 10 columns
-
-        // Calculate rows to maintain roughly square aspect ratio (each char is ~2:1 height:width)
+        // Album art plane - use ncvisual_geom for correct aspect ratio
         int available_rows = static_cast<int>(rows) - 12;
-        int art_rows = std::min(static_cast<int>(art_cols / 2), available_rows);
-        art_rows = std::max(5, art_rows); // Minimum 5 rows
+        int art_rows = std::min(30, available_rows);
+        art_rows = std::max(5, art_rows);
+        int art_cols = art_rows; // Default 1:1
+
+        // Use ncvisual_geom to calculate proper dimensions if we have album art
+        if (album_art_visual)
+        {
+            struct ncvgeom geom;
+            struct ncvisual_options temp_vopts = {};
+            temp_vopts.scaling = NCSCALE_SCALE;
+            temp_vopts.blitter = NCBLIT_2x1;  // Match the rendering blitter
+
+            if (ncvisual_geom(nc, album_art_visual, &temp_vopts, &geom) == 0)
+            {
+                spdlog::debug("Image geometry: {}x{} pixels, rendered as {}x{} cells",
+                    geom.pixx, geom.pixy, geom.rcellx, geom.rcelly);
+
+                // Calculate aspect ratio from ncvisual_geom rendered cells
+                // notcurses calculates the correct cell ratio for this image+blitter+terminal
+                if (geom.rcellx > 0 && geom.rcelly > 0)
+                {
+                    // Scale the rendered geometry to our desired height
+                    float scale = (float)art_rows / (float)geom.rcelly;
+                    art_cols = (int)(geom.rcellx * scale);
+
+                    spdlog::debug("Calculated plane dimensions: {}x{} cells (scaled from rendered {}x{})",
+                        art_cols, art_rows, geom.rcellx, geom.rcelly);
+                }
+            }
+            else
+            {
+                spdlog::warn("ncvisual_geom failed, using default 1:1 aspect");
+            }
+        }
+
+        art_cols = std::min(art_cols, static_cast<int>(cols * 0.8));
+        art_cols = std::max(10, art_cols);
+
+        spdlog::debug("Final art plane dimensions: {}x{} cells", art_cols, art_rows);
 
         struct ncplane_options art_opts = {};
         art_opts.y = 2;
@@ -888,17 +921,8 @@ int main(int argc, char *argv[])
         }
     };
 
-    // Create initial planes
-    createPlanes();
-
-    // Main event loop
-    bool running = true;
-    bool was_playing = false;
-    bool show_help = false;
-    struct ncvisual* album_art_visual = nullptr;
+    // Extract album art for first track before creating planes
     size_t current_track_index = playlist.currentIndex();
-
-    // Extract album art for first track
     std::string art_path = ExtractAlbumArt(playlist.current().filepath);
     spdlog::info("Album art extraction result: {}", art_path.empty() ? "none" : art_path);
     if (!art_path.empty())
@@ -913,6 +937,14 @@ int main(int argc, char *argv[])
             spdlog::info("Successfully loaded album art visual");
         }
     }
+
+    // Create initial planes (after loading album art)
+    createPlanes();
+
+    // Main event loop
+    bool running = true;
+    bool was_playing = false;
+    bool show_help = false;
 
     // Start playing automatically
     player.play();
