@@ -36,6 +36,15 @@
 #include <mp4/mp4tag.h>
 #include <mp4/mp4coverart.h>
 
+// Structure to hold all UI planes
+struct UIPlanes {
+    struct ncplane* stdplane = nullptr;
+    struct ncplane* status_plane = nullptr;
+    struct ncplane* help_plane = nullptr;
+    struct ncplane* art_plane = nullptr;
+    struct ncvisual* album_art_visual = nullptr;
+};
+
 volatile sig_atomic_t signal_received = 0;
 struct notcurses* nc = nullptr;
 
@@ -339,44 +348,42 @@ void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const P
     ncplane_putstr_yx(status_plane, 6, info_x, info_buf);
 }
 
-void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncplane* help_plane,
-            struct ncplane* art_plane, struct ncvisual* album_art_visual,
-            AudioPlayer &player, const Playlist &playlist, bool show_help)
+void DrawUI(UIPlanes& planes, AudioPlayer &player, const Playlist &playlist, bool show_help)
 {
     // If planes are null (terminal too small), skip drawing
-    if (!status_plane || !help_plane || !art_plane)
+    if (!planes.status_plane || !planes.help_plane || !planes.art_plane)
     {
         return;
     }
 
     // Clear planes
-    ncplane_erase(stdplane);
-    ncplane_erase(status_plane);
-    ncplane_erase(help_plane);
-    ncplane_erase(art_plane);
+    ncplane_erase(planes.stdplane);
+    ncplane_erase(planes.status_plane);
+    ncplane_erase(planes.help_plane);
+    ncplane_erase(planes.art_plane);
 
     // Get dimensions
     unsigned int rows, cols;
-    ncplane_dim_yx(stdplane, &rows, &cols);
+    ncplane_dim_yx(planes.stdplane, &rows, &cols);
 
     // Draw title bar
-    ncplane_set_fg_rgb8(stdplane, 0x8F, 0xC8, 0xD8); // Soft sky blue
-    ncplane_set_styles(stdplane, NCSTYLE_BOLD);
+    ncplane_set_fg_rgb8(planes.stdplane, 0x8F, 0xC8, 0xD8); // Soft sky blue
+    ncplane_set_styles(planes.stdplane, NCSTYLE_BOLD);
     std::string title = " TUI Player ";
-    ncplane_putstr_yx(stdplane, 0, (cols - title.length()) / 2, title.c_str());
-    ncplane_set_styles(stdplane, NCSTYLE_NONE);
+    ncplane_putstr_yx(planes.stdplane, 0, (cols - title.length()) / 2, title.c_str());
+    ncplane_set_styles(planes.stdplane, NCSTYLE_NONE);
 
     // Draw album art if available
-    if (album_art_visual)
+    if (planes.album_art_visual)
     {
         struct ncvisual_options vopts = {};
-        vopts.n = art_plane;
+        vopts.n = planes.art_plane;
         vopts.scaling = NCSCALE_SCALE;
         vopts.blitter = NCBLIT_2x1;  // Use half-block blitter for better compatibility
         vopts.flags = 0;
 
         // Render the visual
-        struct ncplane* result = ncvisual_blit(nc, album_art_visual, &vopts);
+        struct ncplane* result = ncvisual_blit(nc, planes.album_art_visual, &vopts);
         if (result == nullptr)
         {
             spdlog::warn("Failed to blit album art visual");
@@ -402,11 +409,11 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
     std::string song_line = song_label + song_value;
     int song_x = (cols - song_line.length()) / 2;
 
-    ncplane_set_fg_rgb8(status_plane, 0xF0, 0xF0, 0xE8); // Soft cream
-    ncplane_putstr_yx(status_plane, 0, song_x, song_label.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
-    ncplane_putstr(status_plane, song_value.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
+    ncplane_set_fg_rgb8(planes.status_plane, 0xF0, 0xF0, 0xE8); // Soft cream
+    ncplane_putstr_yx(planes.status_plane, 0, song_x, song_label.c_str());
+    ncplane_set_styles(planes.status_plane, NCSTYLE_BOLD);
+    ncplane_putstr(planes.status_plane, song_value.c_str());
+    ncplane_set_styles(planes.status_plane, NCSTYLE_NONE);
 
     // Line 1: Artist
     std::string artist_label = "Artist: ";
@@ -422,19 +429,19 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
     std::string artist_line = artist_label + artist_value;
     int artist_x = (cols - artist_line.length()) / 2;
 
-    ncplane_set_fg_rgb8(status_plane, 0x5F, 0xD4, 0xD4); // Turquoise
-    ncplane_putstr_yx(status_plane, 1, artist_x, artist_label.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
+    ncplane_set_fg_rgb8(planes.status_plane, 0x5F, 0xD4, 0xD4); // Turquoise
+    ncplane_putstr_yx(planes.status_plane, 1, artist_x, artist_label.c_str());
+    ncplane_set_styles(planes.status_plane, NCSTYLE_BOLD);
     if (track.artist)
     {
-        ncplane_putstr(status_plane, artist_value.c_str());
+        ncplane_putstr(planes.status_plane, artist_value.c_str());
     }
     else
     {
-        ncplane_set_fg_rgb8(status_plane, 0xA0, 0xA0, 0x98); // Warm gray
-        ncplane_putstr(status_plane, artist_value.c_str());
+        ncplane_set_fg_rgb8(planes.status_plane, 0xA0, 0xA0, 0x98); // Warm gray
+        ncplane_putstr(planes.status_plane, artist_value.c_str());
     }
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
+    ncplane_set_styles(planes.status_plane, NCSTYLE_NONE);
 
     // Line 2: Album
     std::string album_label = "Album: ";
@@ -450,34 +457,34 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
     std::string album_line = album_label + album_value;
     int album_x = (cols - album_line.length()) / 2;
 
-    ncplane_set_fg_rgb8(status_plane, 0xB4, 0xA7, 0xD6); // Soft lavender
-    ncplane_putstr_yx(status_plane, 2, album_x, album_label.c_str());
-    ncplane_set_styles(status_plane, NCSTYLE_BOLD);
+    ncplane_set_fg_rgb8(planes.status_plane, 0xB4, 0xA7, 0xD6); // Soft lavender
+    ncplane_putstr_yx(planes.status_plane, 2, album_x, album_label.c_str());
+    ncplane_set_styles(planes.status_plane, NCSTYLE_BOLD);
     if (track.album)
     {
-        ncplane_putstr(status_plane, album_value.c_str());
+        ncplane_putstr(planes.status_plane, album_value.c_str());
     }
     else
     {
-        ncplane_set_fg_rgb8(status_plane, 0xA0, 0xA0, 0x98); // Warm gray
-        ncplane_putstr(status_plane, album_value.c_str());
+        ncplane_set_fg_rgb8(planes.status_plane, 0xA0, 0xA0, 0x98); // Warm gray
+        ncplane_putstr(planes.status_plane, album_value.c_str());
     }
-    ncplane_set_styles(status_plane, NCSTYLE_NONE);
+    ncplane_set_styles(planes.status_plane, NCSTYLE_NONE);
 
     // Line 3: Empty line for spacing
 
     // Lines 4-6: Dynamic status (state, progress, volume) - drawn by DrawStatusUpdate
-    DrawStatusUpdate(status_plane, player, playlist);
+    DrawStatusUpdate(planes.status_plane, player, playlist);
 
     // Help text
     if (show_help)
     {
-        ncplane_set_fg_rgb8(help_plane, 0xF0, 0xF0, 0xE8); // Soft cream
-        ncplane_set_styles(help_plane, NCSTYLE_BOLD);
-        ncplane_putstr_yx(help_plane, 0, 2, "Keyboard Controls:");
-        ncplane_set_styles(help_plane, NCSTYLE_NONE);
+        ncplane_set_fg_rgb8(planes.help_plane, 0xF0, 0xF0, 0xE8); // Soft cream
+        ncplane_set_styles(planes.help_plane, NCSTYLE_BOLD);
+        ncplane_putstr_yx(planes.help_plane, 0, 2, "Keyboard Controls:");
+        ncplane_set_styles(planes.help_plane, NCSTYLE_NONE);
 
-        ncplane_set_fg_rgb8(help_plane, 0xD4, 0xC8, 0xA8); // Warm beige
+        ncplane_set_fg_rgb8(planes.help_plane, 0xD4, 0xC8, 0xA8); // Warm beige
         const char* help_lines[] = {
             "  Space   - Play/Pause         f/Right - Forward 10s",
             "  s       - Stop               b/Left  - Back 10s",
@@ -489,13 +496,13 @@ void DrawUI(struct ncplane* stdplane, struct ncplane* status_plane, struct ncpla
 
         for (size_t i = 0; i < sizeof(help_lines) / sizeof(help_lines[0]); ++i)
         {
-            ncplane_putstr_yx(help_plane, i + 2, 2, help_lines[i]);
+            ncplane_putstr_yx(planes.help_plane, i + 2, 2, help_lines[i]);
         }
     }
     else
     {
-        ncplane_set_fg_rgb8(help_plane, 0xA0, 0xA0, 0x98); // Warm gray
-        ncplane_putstr_yx(help_plane, 0, 2, "Press 'h' for help, 'q' to quit");
+        ncplane_set_fg_rgb8(planes.help_plane, 0xA0, 0xA0, 0x98); // Warm gray
+        ncplane_putstr_yx(planes.help_plane, 0, 2, "Press 'h' for help, 'q' to quit");
     }
 }
 
@@ -774,31 +781,28 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    struct ncplane* stdplane = notcurses_stdplane(nc);
+    UIPlanes planes;
+    planes.stdplane = notcurses_stdplane(nc);
 
     // Clear and render initial display
-    ncplane_erase(stdplane);
+    ncplane_erase(planes.stdplane);
     notcurses_render(nc);
-    struct ncplane* status_plane = nullptr;
-    struct ncplane* help_plane = nullptr;
-    struct ncplane* art_plane = nullptr;
-    struct ncvisual* album_art_visual = nullptr;
 
     // Lambda to create/recreate planes
     auto createPlanes = [&]() {
         // Destroy old planes if they exist
-        if (status_plane) ncplane_destroy(status_plane);
-        if (help_plane) ncplane_destroy(help_plane);
-        if (art_plane) ncplane_destroy(art_plane);
+        if (planes.status_plane) ncplane_destroy(planes.status_plane);
+        if (planes.help_plane) ncplane_destroy(planes.help_plane);
+        if (planes.art_plane) ncplane_destroy(planes.art_plane);
 
         // Reset to nullptr to avoid using stale pointers
-        status_plane = nullptr;
-        help_plane = nullptr;
-        art_plane = nullptr;
+        planes.status_plane = nullptr;
+        planes.help_plane = nullptr;
+        planes.art_plane = nullptr;
 
         // Get current dimensions
         unsigned int rows, cols;
-        ncplane_dim_yx(stdplane, &rows, &cols);
+        ncplane_dim_yx(planes.stdplane, &rows, &cols);
 
         // Minimum terminal size check
         const unsigned int MIN_ROWS = 15;
@@ -808,17 +812,17 @@ int main(int argc, char *argv[])
         {
             spdlog::warn("Terminal too small ({}x{}), minimum is {}x{}", cols, rows, MIN_COLS, MIN_ROWS);
             // Display error message on stdplane
-            ncplane_erase(stdplane);
-            ncplane_set_fg_rgb8(stdplane, 0xFF, 0x80, 0x80);
+            ncplane_erase(planes.stdplane);
+            ncplane_set_fg_rgb8(planes.stdplane, 0xFF, 0x80, 0x80);
             std::string error_msg = "Terminal too small!";
             std::string min_msg = "Minimum: " + std::to_string(MIN_COLS) + "x" + std::to_string(MIN_ROWS);
             if (rows >= 2 && cols >= error_msg.length())
             {
-                ncplane_putstr_yx(stdplane, rows / 2, (cols - error_msg.length()) / 2, error_msg.c_str());
+                ncplane_putstr_yx(planes.stdplane, rows / 2, (cols - error_msg.length()) / 2, error_msg.c_str());
             }
             if (rows >= 3 && cols >= min_msg.length())
             {
-                ncplane_putstr_yx(stdplane, rows / 2 + 1, (cols - min_msg.length()) / 2, min_msg.c_str());
+                ncplane_putstr_yx(planes.stdplane, rows / 2 + 1, (cols - min_msg.length()) / 2, min_msg.c_str());
             }
             notcurses_render(nc);
             return;
@@ -830,8 +834,8 @@ int main(int argc, char *argv[])
         status_opts.x = 0;
         status_opts.rows = std::min(7u, rows > 0 ? rows - 1 : 1);
         status_opts.cols = cols;
-        status_plane = ncplane_create(stdplane, &status_opts);
-        if (!status_plane)
+        planes.status_plane = ncplane_create(planes.stdplane, &status_opts);
+        if (!planes.status_plane)
         {
             spdlog::error("Failed to create status plane");
             return;
@@ -844,14 +848,14 @@ int main(int argc, char *argv[])
         int art_cols = art_rows; // Default 1:1
 
         // Use ncvisual_geom to calculate proper dimensions if we have album art
-        if (album_art_visual)
+        if (planes.album_art_visual)
         {
             struct ncvgeom geom;
             struct ncvisual_options temp_vopts = {};
             temp_vopts.scaling = NCSCALE_SCALE;
             temp_vopts.blitter = NCBLIT_2x1;  // Match the rendering blitter
 
-            if (ncvisual_geom(nc, album_art_visual, &temp_vopts, &geom) == 0)
+            if (ncvisual_geom(nc, planes.album_art_visual, &temp_vopts, &geom) == 0)
             {
                 spdlog::debug("Image geometry: {}x{} pixels, rendered as {}x{} cells",
                     geom.pixx, geom.pixy, geom.rcellx, geom.rcelly);
@@ -884,8 +888,8 @@ int main(int argc, char *argv[])
         art_opts.x = cols > static_cast<unsigned>(art_cols) ? (cols - art_cols) / 2 : 0;
         art_opts.rows = art_rows;
         art_opts.cols = art_cols;
-        art_plane = ncplane_create(stdplane, &art_opts);
-        if (!art_plane)
+        planes.art_plane = ncplane_create(planes.stdplane, &art_opts);
+        if (!planes.art_plane)
         {
             spdlog::error("Failed to create art plane");
             return;
@@ -913,8 +917,8 @@ int main(int argc, char *argv[])
             help_opts.rows = std::max(3, help_rows);
             help_opts.cols = std::max(10, static_cast<int>(cols) - 4);
         }
-        help_plane = ncplane_create(stdplane, &help_opts);
-        if (!help_plane)
+        planes.help_plane = ncplane_create(planes.stdplane, &help_opts);
+        if (!planes.help_plane)
         {
             spdlog::error("Failed to create help plane");
             return;
@@ -927,8 +931,8 @@ int main(int argc, char *argv[])
     spdlog::info("Album art extraction result: {}", art_path.empty() ? "none" : art_path);
     if (!art_path.empty())
     {
-        album_art_visual = ncvisual_from_file(art_path.c_str());
-        if (!album_art_visual)
+        planes.album_art_visual = ncvisual_from_file(art_path.c_str());
+        if (!planes.album_art_visual)
         {
             spdlog::warn("Failed to load album art from: {}", art_path);
         }
@@ -952,7 +956,7 @@ int main(int argc, char *argv[])
 
     // Track terminal dimensions for resize detection
     unsigned int last_rows = 0, last_cols = 0;
-    ncplane_dim_yx(stdplane, &last_rows, &last_cols);
+    ncplane_dim_yx(planes.stdplane, &last_rows, &last_cols);
 
     // Track state for detecting changes
     bool needs_full_redraw = true;  // Full redraw needed (track change, resize, help toggle)
@@ -962,7 +966,7 @@ int main(int argc, char *argv[])
     {
         {
             unsigned int current_rows, current_cols;
-            ncplane_dim_yx(stdplane, &current_rows, &current_cols);
+            ncplane_dim_yx(planes.stdplane, &current_rows, &current_cols);
 
             if (current_rows != last_rows || current_cols != last_cols)
             {
@@ -983,18 +987,18 @@ int main(int argc, char *argv[])
             current_track_index = playlist.currentIndex();
 
             // Cleanup old album art
-            if (album_art_visual)
+            if (planes.album_art_visual)
             {
-                ncvisual_destroy(album_art_visual);
-                album_art_visual = nullptr;
+                ncvisual_destroy(planes.album_art_visual);
+                planes.album_art_visual = nullptr;
             }
 
             // Extract and load new album art
             art_path = ExtractAlbumArt(playlist.current().filepath);
             if (!art_path.empty())
             {
-                album_art_visual = ncvisual_from_file(art_path.c_str());
-                if (!album_art_visual)
+                planes.album_art_visual = ncvisual_from_file(art_path.c_str());
+                if (!planes.album_art_visual)
                 {
                     spdlog::warn("Failed to load album art from: {}", art_path);
                 }
@@ -1005,7 +1009,7 @@ int main(int argc, char *argv[])
         // Render based on what needs updating
         if (needs_full_redraw)
         {
-            DrawUI(stdplane, status_plane, help_plane, art_plane, album_art_visual, player, playlist, show_help);
+            DrawUI(planes, player, playlist, show_help);
             notcurses_render(nc);
 
             needs_full_redraw = false;
@@ -1013,7 +1017,7 @@ int main(int argc, char *argv[])
         }
         else if (needs_status_update)
         {
-            DrawStatusUpdate(status_plane, player, playlist);
+            DrawStatusUpdate(planes.status_plane, player, playlist);
             notcurses_render(nc);
             needs_status_update = false;
         }
@@ -1054,16 +1058,16 @@ int main(int argc, char *argv[])
     }
 
     // Cleanup
-    if (album_art_visual)
+    if (planes.album_art_visual)
     {
-        ncvisual_destroy(album_art_visual);
+        ncvisual_destroy(planes.album_art_visual);
     }
-    ncplane_destroy(art_plane);
-    ncplane_destroy(help_plane);
-    ncplane_destroy(status_plane);
+    ncplane_destroy(planes.art_plane);
+    ncplane_destroy(planes.help_plane);
+    ncplane_destroy(planes.status_plane);
 
     // Clear the screen before stopping
-    ncplane_erase(stdplane);
+    ncplane_erase(planes.stdplane);
     notcurses_render(nc);
 
     notcurses_stop(nc);
