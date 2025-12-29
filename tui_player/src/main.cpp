@@ -10,6 +10,7 @@
 #include <csignal>
 #include <cstring>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -44,6 +45,81 @@ struct UIPlanes {
     struct ncplane* art_plane = nullptr;
     struct ncvisual* album_art_visual = nullptr;
 };
+
+// Parse blitter name from command-line string
+ncblitter_e ParseBlitter(const std::string& blitter_name) {
+    std::string lower = blitter_name;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+    if (lower == "default" || lower == "auto") {
+        return NCBLIT_DEFAULT;
+    } else if (lower == "ascii" || lower == "1x1") {
+        return NCBLIT_1x1;
+    } else if (lower == "half" || lower == "2x1") {
+        return NCBLIT_2x1;
+    } else if (lower == "quad" || lower == "quadrant" || lower == "2x2") {
+        return NCBLIT_2x2;
+    } else if (lower == "sextant" || lower == "sex" || lower == "3x2") {
+        return NCBLIT_3x2;
+    } else if (lower == "braille") {
+        return NCBLIT_BRAILLE;
+    } else if (lower == "pixel" || lower == "sixel" || lower == "kitty") {
+        return NCBLIT_PIXEL;
+    } else {
+        spdlog::warn("Unknown blitter '{}', using default", blitter_name);
+        return NCBLIT_DEFAULT;
+    }
+}
+
+// Get human-readable name for blitter
+const char* BlitterName(ncblitter_e blitter) {
+    switch (blitter) {
+        case NCBLIT_DEFAULT: return "default";
+        case NCBLIT_1x1: return "ascii (1x1)";
+        case NCBLIT_2x1: return "half-block (2x1)";
+        case NCBLIT_2x2: return "quadrant (2x2)";
+        case NCBLIT_3x2: return "sextant (3x2)";
+        case NCBLIT_BRAILLE: return "braille";
+        case NCBLIT_PIXEL: return "pixel";
+        default: return "unknown";
+    }
+}
+
+// Try to blit with fallback support
+struct ncplane* BlitWithFallback(struct notcurses* nc, struct ncvisual* visual,
+                                 struct ncvisual_options* vopts, ncblitter_e preferred_blitter) {
+    // Fallback chain: try preferred, then degrade gracefully
+    ncblitter_e fallback_chain[] = {
+        preferred_blitter,
+        NCBLIT_2x2,      // Quadrant (good compatibility)
+        NCBLIT_2x1,      // Half-block (even better compatibility)
+        NCBLIT_1x1,      // ASCII (maximum compatibility)
+    };
+
+    struct ncplane* result = nullptr;
+
+    for (ncblitter_e blitter : fallback_chain) {
+        // Skip duplicates in fallback chain
+        if (result == nullptr || blitter != preferred_blitter) {
+            vopts->blitter = blitter;
+            result = ncvisual_blit(nc, visual, vopts);
+
+            if (result != nullptr) {
+                if (blitter != preferred_blitter) {
+                    spdlog::info("Fell back to {} blitter", BlitterName(blitter));
+                } else {
+                    spdlog::debug("Using {} blitter", BlitterName(blitter));
+                }
+                return result;
+            } else {
+                spdlog::debug("Failed to blit with {} blitter, trying fallback", BlitterName(blitter));
+            }
+        }
+    }
+
+    spdlog::error("Failed to blit album art with any blitter");
+    return nullptr;
+}
 
 volatile sig_atomic_t signal_received = 0;
 struct notcurses* nc = nullptr;
@@ -348,7 +424,7 @@ void DrawStatusUpdate(struct ncplane* status_plane, AudioPlayer &player, const P
     ncplane_putstr_yx(status_plane, 6, info_x, info_buf);
 }
 
-void DrawUI(UIPlanes& planes, AudioPlayer &player, const Playlist &playlist, bool show_help)
+void DrawUI(UIPlanes& planes, AudioPlayer &player, const Playlist &playlist, bool show_help, ncblitter_e blitter)
 {
     // If planes are null (terminal too small), skip drawing
     if (!planes.status_plane || !planes.help_plane || !planes.art_plane)
@@ -379,14 +455,13 @@ void DrawUI(UIPlanes& planes, AudioPlayer &player, const Playlist &playlist, boo
         struct ncvisual_options vopts = {};
         vopts.n = planes.art_plane;
         vopts.scaling = NCSCALE_SCALE;
-        vopts.blitter = NCBLIT_2x1;  // Use half-block blitter for better compatibility
         vopts.flags = 0;
 
-        // Render the visual
-        struct ncplane* result = ncvisual_blit(nc, planes.album_art_visual, &vopts);
+        // Render the visual with fallback support
+        struct ncplane* result = BlitWithFallback(nc, planes.album_art_visual, &vopts, blitter);
         if (result == nullptr)
         {
-            spdlog::warn("Failed to blit album art visual");
+            spdlog::warn("Failed to blit album art visual with any blitter");
         }
     }
 
@@ -645,6 +720,8 @@ int main(int argc, char *argv[])
         ("f,file", "Play a single audio file", cxxopts::value<std::string>())
         ("stdin", "Read playlist from stdin")
         ("r,repeat", "Repeat playlist")
+        ("b,blitter", "Image blitter for album art (default|ascii|half|quad|sextant|braille|pixel)",
+         cxxopts::value<std::string>()->default_value("default"))
         ("verbose", "Display status and debug information")
         ("h,help", "Print usage");
     // clang-format on
@@ -675,8 +752,14 @@ int main(int argc, char *argv[])
     const bool file_mode = result.count("file") > 0;
     const bool verbose = result.count("verbose") > 0;
 
+    // Parse blitter selection
+    std::string blitter_str = result["blitter"].as<std::string>();
+    ncblitter_e selected_blitter = ParseBlitter(blitter_str);
+
     // Initialize logger
     InitializeLogger(verbose);
+
+    spdlog::info("Selected blitter: {}", BlitterName(selected_blitter));
 
     // Load playlist
     std::optional<Playlist> playlist_opt;
@@ -1009,7 +1092,7 @@ int main(int argc, char *argv[])
         // Render based on what needs updating
         if (needs_full_redraw)
         {
-            DrawUI(planes, player, playlist, show_help);
+            DrawUI(planes, player, playlist, show_help, selected_blitter);
             notcurses_render(nc);
 
             needs_full_redraw = false;
