@@ -340,15 +340,24 @@ std::optional<std::vector<std::string>> ChatGPTBackend::generate(
 
     // Build initial prompt
     std::ostringstream initial_prompt;
-    initial_prompt << "You are a music playlist curator with access to search functions for a music library of "
+    initial_prompt << "You are an expert music playlist curator with access to search functions for a music library of "
                    << library_metadata.size() << " tracks.\n\n"
                    << "User's request: \"" << user_prompt << "\"\n\n"
-                   << "Use the provided search functions to find tracks that match the user's request. "
-                   << "You can search by artist, genre, album, title, or year range. "
-                   << "Start by using get_library_overview to understand what's available, "
-                   << "then use specific searches to find matching tracks.\n\n"
-                   << "Once you've found suitable tracks, respond with a JSON array of track indices (0-based) "
-                   << "that best match the request. Select 10-50 tracks that fit the description.\n"
+                   << "SEARCH STRATEGY:\n"
+                   << "1. Start with get_library_overview to understand available artists, genres, and overall collection\n"
+                   << "2. Use targeted searches (by artist, genre, album, title, year) to find matching tracks\n"
+                   << "3. Cast a wide net initially - search for related artists, subgenres, and thematic connections\n\n"
+                   << "PLAYLIST CURATION PRINCIPLES:\n"
+                   << "- Create a cohesive listening experience, not just a search results dump\n"
+                   << "- Balance literal matches with thematic/vibe matches (e.g., 'chill' means mood, not just genre)\n"
+                   << "- Ensure diversity: avoid more than 3-4 consecutive tracks from the same artist or album\n"
+                   << "- Consider flow and pacing: vary energy levels, mix eras thoughtfully\n"
+                   << "- For broad requests (e.g., 'rock'), sample across subgenres and decades\n"
+                   << "- For specific requests (e.g., 'Beatles'), include deep cuts alongside hits\n"
+                   << "- Aim for 15-40 tracks depending on request specificity (narrow=fewer, broad=more)\n\n"
+                   << "FINAL RESPONSE:\n"
+                   << "Once you've curated suitable tracks, respond with a JSON array of track indices (0-based) "
+                   << "that create the best playlist experience.\n"
                    << "Example final response: [42, 156, 892, 1043, ...]";
 
     // Initialize conversation

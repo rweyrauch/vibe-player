@@ -18,10 +18,17 @@ std::string AIPromptBuilder::buildPrompt(
 
     std::ostringstream prompt;
 
-    prompt << "You are a music playlist curator. Based on the user's request, "
-           << "select songs from the provided library that best match their description.\n\n";
-
-    prompt << "User's request: \"" << user_request << "\"\n\n";
+    prompt << "You are an expert music playlist curator. Your goal is to create a cohesive, "
+           << "well-curated playlist based on the user's request.\n\n"
+           << "User's request: \"" << user_request << "\"\n\n"
+           << "CURATION PRINCIPLES:\n"
+           << "- Create a cohesive listening experience, not just a list of matches\n"
+           << "- Balance literal matches with thematic/vibe matches (e.g., 'upbeat' means energy, not just genre)\n"
+           << "- Ensure diversity: avoid more than 3-4 consecutive tracks from the same artist or album\n"
+           << "- Consider flow and pacing: vary energy levels, mix eras and styles thoughtfully\n"
+           << "- For broad requests (e.g., 'rock'), sample across subgenres and decades\n"
+           << "- For specific requests (e.g., 'Beatles'), include variety from their catalog\n"
+           << "- Aim for 15-30 tracks depending on request specificity (narrow=fewer, broad=more)\n\n";
 
     // Sample tracks if library is too large
     sampled_indices_out.clear();
@@ -90,8 +97,9 @@ std::string AIPromptBuilder::buildPrompt(
         prompt << "\n";
     }
 
-    prompt << "\nRespond with ONLY a JSON array of song numbers that match "
-           << "the user's request. Select 10-30 songs that best fit the description. "
+    prompt << "\nCarefully curate your selections following the principles above. "
+           << "Respond with ONLY a JSON array of song numbers (from the numbered list) "
+           << "that create the best playlist experience for this request.\n"
            << "Example response: [1, 5, 12, 23, 45]\n";
 
     return prompt.str();
