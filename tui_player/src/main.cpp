@@ -44,6 +44,7 @@ struct UIPlanes {
     struct ncplane* help_plane = nullptr;
     struct ncplane* art_plane = nullptr;
     struct ncvisual* album_art_visual = nullptr;
+    struct ncplane* playlist_plane = nullptr;
 };
 
 // Parse blitter name from command-line string
@@ -581,11 +582,211 @@ void DrawUI(UIPlanes& planes, AudioPlayer &player, const Playlist &playlist, boo
     }
 }
 
+void DrawPlaylistView(struct ncplane* playlist_plane,
+                      const Playlist& playlist,
+                      size_t cursor_position,
+                      size_t scroll_offset)
+{
+    if (!playlist_plane)
+    {
+        return;
+    }
+
+    // Clear the plane
+    ncplane_erase(playlist_plane);
+
+    // Get dimensions
+    unsigned int rows, cols;
+    ncplane_dim_yx(playlist_plane, &rows, &cols);
+
+    // Draw border and title
+    ncplane_set_fg_rgb8(playlist_plane, 0x7F, 0xC8, 0xA0);  // Sea green
+    ncplane_set_styles(playlist_plane, NCSTYLE_BOLD);
+
+    // Top border - build as string
+    std::string top_border;
+    top_border += "┌";
+    for (unsigned int i = 1; i < cols - 1; ++i)
+    {
+        top_border += "─";
+    }
+    top_border += "┐";
+    ncplane_putstr_yx(playlist_plane, 0, 0, top_border.c_str());
+
+    // Title
+    std::string title = " Playlist ";
+    int title_x = (cols - title.length()) / 2;
+    ncplane_putstr_yx(playlist_plane, 0, title_x, title.c_str());
+
+    // Side borders
+    for (unsigned int i = 1; i < rows - 1; ++i)
+    {
+        ncplane_putstr_yx(playlist_plane, i, 0, "│");
+        ncplane_putstr_yx(playlist_plane, i, cols - 1, "│");
+    }
+
+    // Bottom border - build as string
+    std::string bottom_border;
+    bottom_border += "└";
+    for (unsigned int i = 1; i < cols - 1; ++i)
+    {
+        bottom_border += "─";
+    }
+    bottom_border += "┘";
+    ncplane_putstr_yx(playlist_plane, rows - 1, 0, bottom_border.c_str());
+
+    ncplane_set_styles(playlist_plane, NCSTYLE_NONE);
+
+    // Calculate available space for tracks
+    int content_height = rows - 2;  // Subtract top and bottom borders
+    int content_width = cols - 4;   // Subtract left border, padding, right border
+
+    // Get playlist tracks
+    const auto& tracks = playlist.tracks();
+    size_t current_playing_index = playlist.currentIndex();
+
+    // Draw tracks
+    int display_row = 1;  // Start below top border
+    for (size_t i = scroll_offset; i < tracks.size() && display_row < static_cast<int>(rows - 1); ++i)
+    {
+        const auto& track = tracks[i];
+
+        // Format: "Artist - Title" or fallback to filename
+        std::string display_text;
+        if (track.artist && track.title)
+        {
+            display_text = *track.artist + " - " + *track.title;
+        }
+        else if (track.title)
+        {
+            display_text = *track.title;
+        }
+        else
+        {
+            display_text = track.filename;
+        }
+
+        // Truncate if needed
+        if (display_text.length() > static_cast<size_t>(content_width))
+        {
+            display_text = TruncateString(display_text, content_width);
+        }
+
+        // Determine styling
+        bool is_cursor = (i == cursor_position);
+        bool is_playing = (i == current_playing_index);
+
+        // Clear background first
+        ncplane_set_bg_rgb8(playlist_plane, 0x00, 0x00, 0x00);  // Default black background
+
+        // Apply styling
+        if (is_cursor && is_playing)
+        {
+            // Both cursor and playing - bright highlight with white background
+            ncplane_set_bg_rgb8(playlist_plane, 0xFF, 0xFF, 0xFF);  // White background
+            ncplane_set_fg_rgb8(playlist_plane, 0x00, 0x00, 0x00);  // Black text
+            ncplane_set_styles(playlist_plane, NCSTYLE_BOLD);
+            ncplane_putstr_yx(playlist_plane, display_row, 2, "▶ ");
+            ncplane_putstr(playlist_plane, display_text.c_str());
+        }
+        else if (is_cursor)
+        {
+            // Just cursor - selection highlight with gray background
+            ncplane_set_bg_rgb8(playlist_plane, 0x40, 0x40, 0x40);  // Dark gray background
+            ncplane_set_fg_rgb8(playlist_plane, 0xFF, 0xFF, 0xFF);  // White text
+            ncplane_set_styles(playlist_plane, NCSTYLE_NONE);
+            ncplane_putstr_yx(playlist_plane, display_row, 2, "  ");
+            ncplane_putstr(playlist_plane, display_text.c_str());
+        }
+        else if (is_playing)
+        {
+            // Just playing - marker only
+            ncplane_set_fg_rgb8(playlist_plane, 0x98, 0xD8, 0xC8);  // Mint green
+            ncplane_set_styles(playlist_plane, NCSTYLE_BOLD);
+            ncplane_putstr_yx(playlist_plane, display_row, 2, "▶ ");
+            ncplane_putstr(playlist_plane, display_text.c_str());
+        }
+        else
+        {
+            // Regular track
+            ncplane_set_fg_rgb8(playlist_plane, 0xD4, 0xC8, 0xA8);  // Warm beige
+            ncplane_set_styles(playlist_plane, NCSTYLE_NONE);
+            ncplane_putstr_yx(playlist_plane, display_row, 2, "  ");
+            ncplane_putstr(playlist_plane, display_text.c_str());
+        }
+
+        // Reset background
+        ncplane_set_bg_rgb8(playlist_plane, 0x00, 0x00, 0x00);
+        ncplane_set_styles(playlist_plane, NCSTYLE_NONE);
+
+        display_row++;
+    }
+
+    // Draw scrollbar if needed
+    if (tracks.size() > static_cast<size_t>(content_height))
+    {
+        int scrollbar_height = std::max(1, (content_height * content_height) / static_cast<int>(tracks.size()));
+        int scrollbar_position = 1 + (scroll_offset * (content_height - scrollbar_height)) /
+                                 std::max(1, static_cast<int>(tracks.size()) - content_height);
+
+        ncplane_set_fg_rgb8(playlist_plane, 0x50, 0x50, 0x48);  // Dark gray
+        for (int i = 1; i < static_cast<int>(rows - 1); ++i)
+        {
+            if (i >= scrollbar_position && i < scrollbar_position + scrollbar_height)
+            {
+                ncplane_putstr_yx(playlist_plane, i, cols - 2, "█");
+            }
+            else
+            {
+                ncplane_putstr_yx(playlist_plane, i, cols - 2, "░");
+            }
+        }
+    }
+
+    // Draw footer with hints
+    std::string footer = " j/k: navigate | Enter: play | l: close ";
+    int footer_x = (cols - footer.length()) / 2;
+    if (footer_x >= 0 && footer.length() <= cols - 2)
+    {
+        ncplane_set_fg_rgb8(playlist_plane, 0xA0, 0xA0, 0x98);  // Warm gray
+        ncplane_putstr_yx(playlist_plane, rows - 1, footer_x, footer.c_str());
+    }
+}
+
+void UpdatePlaylistScroll(size_t cursor_position,
+                          size_t& scroll_offset,
+                          size_t playlist_size,
+                          int visible_height)
+{
+    // Ensure cursor is visible
+    if (cursor_position < scroll_offset)
+    {
+        // Cursor moved above visible area
+        scroll_offset = cursor_position;
+    }
+    else if (cursor_position >= scroll_offset + static_cast<size_t>(visible_height))
+    {
+        // Cursor moved below visible area
+        scroll_offset = cursor_position - visible_height + 1;
+    }
+
+    // Clamp scroll_offset to valid range
+    size_t max_scroll = (playlist_size > static_cast<size_t>(visible_height))
+                        ? playlist_size - visible_height
+                        : 0;
+    if (scroll_offset > max_scroll)
+    {
+        scroll_offset = max_scroll;
+    }
+}
+
 bool HandleCommand(char32_t ch,
                    AudioPlayer &player,
                    Playlist &playlist,
                    bool &running,
-                   bool &show_help)
+                   bool &show_help,
+                   bool &show_playlist,
+                   size_t &playlist_cursor)
 {
     switch (ch)
     {
@@ -653,6 +854,54 @@ bool HandleCommand(char32_t ch,
             player.cleanup();
             player.loadFile(playlist.current().filepath);
             player.play();
+        }
+        break;
+    case 'l':
+    case 'L':
+        // Toggle playlist view
+        show_playlist = !show_playlist;
+        if (show_playlist)
+        {
+            // Initialize cursor to current playing track
+            playlist_cursor = playlist.currentIndex();
+        }
+        break;
+    case 'j':
+    case 'J':
+        if (show_playlist && playlist.size() > 0)
+        {
+            // Move cursor down
+            if (playlist_cursor < playlist.size() - 1)
+            {
+                playlist_cursor++;
+            }
+        }
+        break;
+    case 'k':
+    case 'K':
+        if (show_playlist && playlist.size() > 0)
+        {
+            // Move cursor up
+            if (playlist_cursor > 0)
+            {
+                playlist_cursor--;
+            }
+        }
+        break;
+    case NCKEY_ENTER:
+    case '\n':
+    case '\r':
+        if (show_playlist)
+        {
+            // Play selected track
+            if (playlist_cursor < playlist.size())
+            {
+                playlist.setIndex(playlist_cursor);
+                player.cleanup();
+                player.loadFile(playlist.current().filepath);
+                player.play();
+                show_playlist = false;  // Close playlist after selection
+            }
         }
         break;
     default:
@@ -877,11 +1126,13 @@ int main(int argc, char *argv[])
         if (planes.status_plane) ncplane_destroy(planes.status_plane);
         if (planes.help_plane) ncplane_destroy(planes.help_plane);
         if (planes.art_plane) ncplane_destroy(planes.art_plane);
+        if (planes.playlist_plane) ncplane_destroy(planes.playlist_plane);
 
         // Reset to nullptr to avoid using stale pointers
         planes.status_plane = nullptr;
         planes.help_plane = nullptr;
         planes.art_plane = nullptr;
+        planes.playlist_plane = nullptr;
 
         // Get current dimensions
         unsigned int rows, cols;
@@ -1006,6 +1257,25 @@ int main(int argc, char *argv[])
             spdlog::error("Failed to create help plane");
             return;
         }
+
+        // Playlist plane - overlay on album art, leave status bar visible
+        struct ncplane_options playlist_opts = {};
+        int playlist_height = art_rows;  // Use same height as album art
+        int playlist_width = std::min(60, static_cast<int>(cols * 0.7));  // 70% of screen width, max 60 cols
+        playlist_opts.y = art_opts.y;  // Align with album art
+        playlist_opts.x = (cols - playlist_width) / 2;  // Center horizontally
+        playlist_opts.rows = playlist_height;
+        playlist_opts.cols = playlist_width;
+        planes.playlist_plane = ncplane_create(planes.stdplane, &playlist_opts);
+        if (!planes.playlist_plane)
+        {
+            spdlog::error("Failed to create playlist plane");
+            return;
+        }
+
+        // Clear and move playlist plane to bottom so it doesn't obscure album art initially
+        ncplane_erase(planes.playlist_plane);
+        ncplane_move_bottom(planes.playlist_plane);
     };
 
     // Extract album art for first track before creating planes
@@ -1032,6 +1302,11 @@ int main(int argc, char *argv[])
     bool running = true;
     bool was_playing = false;
     bool show_help = false;
+
+    // Playlist view state
+    bool show_playlist = false;           // Is playlist view visible
+    size_t playlist_cursor = 0;           // Currently selected song in playlist view
+    size_t playlist_scroll_offset = 0;    // Top visible line for scrolling
 
     // Start playing automatically
     player.play();
@@ -1093,6 +1368,22 @@ int main(int argc, char *argv[])
         if (needs_full_redraw)
         {
             DrawUI(planes, player, playlist, show_help, selected_blitter);
+
+            // Draw playlist overlay if visible, otherwise move it to bottom of stack
+            if (show_playlist && planes.playlist_plane)
+            {
+                // Move playlist to top so it's visible over album art
+                ncplane_move_top(planes.playlist_plane);
+                DrawPlaylistView(planes.playlist_plane, playlist,
+                                playlist_cursor, playlist_scroll_offset);
+            }
+            else if (planes.playlist_plane)
+            {
+                // Move playlist to bottom of stack so it doesn't obscure album art
+                ncplane_move_bottom(planes.playlist_plane);
+                ncplane_erase(planes.playlist_plane);
+            }
+
             notcurses_render(nc);
 
             needs_full_redraw = false;
@@ -1115,12 +1406,29 @@ int main(int argc, char *argv[])
             // Store previous help state to detect toggle
             bool prev_show_help = show_help;
 
-            HandleCommand(ch, player, playlist, running, show_help);
+            HandleCommand(ch, player, playlist, running, show_help, show_playlist, playlist_cursor);
 
-            // Full redraw needed if help toggled or track changed
-            // For other commands (volume, seek, play/pause), status update is sufficient
-            if (show_help != prev_show_help || ch == 'n' || ch == 'N' || ch == 'p' || ch == 'P')
+            // Update playlist scroll if playlist is visible
+            if (show_playlist && planes.playlist_plane)
             {
+                unsigned int playlist_rows, playlist_cols;
+                ncplane_dim_yx(planes.playlist_plane, &playlist_rows, &playlist_cols);
+                int content_height = playlist_rows - 2;  // Subtract borders
+                UpdatePlaylistScroll(playlist_cursor, playlist_scroll_offset,
+                                     playlist.size(), content_height);
+            }
+
+            // Full redraw needed if help toggled, playlist toggled, or track changed
+            // For other commands (volume, seek, play/pause), status update is sufficient
+            if (show_help != prev_show_help || ch == 'n' || ch == 'N' || ch == 'p' || ch == 'P' ||
+                ch == 'l' || ch == 'L')
+            {
+                needs_full_redraw = true;
+            }
+            else if (show_playlist && (ch == 'j' || ch == 'J' || ch == 'k' || ch == 'K' ||
+                                       ch == NCKEY_ENTER || ch == '\n' || ch == '\r'))
+            {
+                // Playlist navigation also needs redraw
                 needs_full_redraw = true;
             }
             else
@@ -1148,6 +1456,10 @@ int main(int argc, char *argv[])
     ncplane_destroy(planes.art_plane);
     ncplane_destroy(planes.help_plane);
     ncplane_destroy(planes.status_plane);
+    if (planes.playlist_plane)
+    {
+        ncplane_destroy(planes.playlist_plane);
+    }
 
     // Clear the screen before stopping
     ncplane_erase(planes.stdplane);
